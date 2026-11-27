@@ -146,6 +146,23 @@ details p,details li{color:var(--mut)}
   </div>
 
   <div class="card">
+    <h2>Semanas no GitHub</h2>
+    <div class="sub">Busca todos os <code>semanas/semana_*.csv</code> do repositório e atualiza o dashboard. Se o repositório for privado, cole um token de leitura (fica só neste navegador).</div>
+    <div class="row" style="margin-top:8px">
+      <label>Repositório<input type="search" id="ghRepo" value="PedroMateus1991/analise2026" style="min-width:260px"></label>
+      <label>Token (opcional se público)<input type="password" id="ghToken" placeholder="github_pat_…" autocomplete="off" style="min-width:260px"></label>
+      <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="ghLembrar"> lembrar neste navegador</label>
+      <button id="ghBtn">Atualizar do GitHub</button>
+    </div>
+    <div class="sub" id="ghStatus" style="margin-top:6px"></div>
+    <details style="margin-top:6px"><summary>Como criar o token (só leitura)</summary>
+      <ul><li>GitHub → Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b> → Generate new token.</li>
+      <li>Repository access: <b>Only select repositories</b> → analise2026.</li>
+      <li>Permissions → Repository permissions → <b>Contents: Read-only</b>. Gere e cole acima.</li>
+      <li>O token nunca vai para outro lugar além de api.github.com.</li></ul></details>
+  </div>
+
+  <div class="card">
     <h2>Carregar outra semana</h2>
     <div class="drop" id="drop">Arraste aqui um ou mais arquivos <b>semana_*.csv</b> ou <label style="display:inline;color:var(--acc);cursor:pointer">escolha no computador<input type="file" id="inFile" accept=".csv" multiple hidden></label></div>
   </div>
@@ -455,7 +472,42 @@ function bind(){
   drop.addEventListener("drop",e=>handle(e.dataTransfer.files));
 }
 
-loadEmbedded(); fillControls(); bind();
+// ---------------------------------------------------------------- GitHub
+function lsGet(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}
+function lsSet(k,v){try{if(v)localStorage.setItem(k,v);else localStorage.removeItem(k);}catch(e){}}
+async function ghLoad(silencioso){
+  const repo=$("ghRepo").value.trim(), token=$("ghToken").value.trim(), out=$("ghStatus");
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){out.textContent="Informe o repositório no formato dono/nome.";return;}
+  lsSet("ghRepo",repo); lsSet("ghToken",$("ghLembrar").checked?token:"");
+  const H=t=>Object.assign({"Accept":t},token?{"Authorization":"Bearer "+token,"X-GitHub-Api-Version":"2022-11-28"}:{});
+  out.textContent="Buscando semanas…";
+  try{
+    const r=await fetch(`https://api.github.com/repos/${repo}/contents/semanas`,{headers:H("application/vnd.github+json")});
+    if(r.status===404){out.textContent=token?"Repositório ou pasta semanas/ não encontrados (confira o token e o nome).":"Repositório privado ou inexistente: cole um token de leitura e tente de novo.";return;}
+    if(r.status===401||r.status===403){out.textContent="GitHub recusou o acesso (token inválido, sem permissão de leitura ou limite de requisições).";return;}
+    if(!r.ok){out.textContent="Erro "+r.status+" ao consultar o GitHub.";return;}
+    const lista=(await r.json()).filter(x=>/^semana_.*\.csv$/i.test(x.name));
+    if(!lista.length){out.textContent="Nenhum semana_*.csv encontrado em semanas/.";return;}
+    let n=0;
+    for(const it of lista){
+      const rr=await fetch(it.url,{headers:H("application/vnd.github.raw+json")});
+      if(!rr.ok) continue;
+      const rows=parseCSV(await rr.text());
+      if(rows.length){ addWeek(rows[0].semana+" · "+rows[0].renko_ticks+"R",rows); n++; }
+    }
+    fillControls(); render();
+    out.textContent=`${n} semana(s) carregada(s) do GitHub às ${new Date().toLocaleTimeString("pt-BR")}.`;
+  }catch(e){
+    out.textContent="Não consegui falar com o GitHub (sem internet ou bloqueio do navegador). Os dados embutidos continuam disponíveis.";
+  }
+}
+
+loadEmbedded();
+$("ghRepo").value=lsGet("ghRepo")||$("ghRepo").value;
+$("ghToken").value=lsGet("ghToken"); $("ghLembrar").checked=!!lsGet("ghToken");
+$("ghBtn").onclick=()=>ghLoad(false);
+fillControls(); bind();
+if($("ghToken").value) ghLoad(true);
 if(Object.keys(st.weeks).length) render(); else $("cardVeredito").innerHTML="<b>Sem dados embutidos.</b> Carregue um arquivo semana_*.csv na seção abaixo.";
 </script>
 </body>
