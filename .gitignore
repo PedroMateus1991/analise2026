@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+# exports brutos do Profit (centenas de MB cada): nunca subir
+dados/*Trade*.csv
+dados/*_Trade_*.csv
