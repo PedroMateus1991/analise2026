@@ -92,6 +92,17 @@ details p,details li{color:var(--mut)}
       <label>Valor do ponto (R$/contrato)<input type="number" id="inRs" value="0.2" step="0.05" min="0"></label>
       <label>Contratos<input type="number" id="inCtr" value="1" step="1" min="1"></label>
       <label>Custo por trade (R$)<input type="number" id="inCusto" value="0" step="0.5" min="0"></label>
+      <label>Filtro de entrada
+        <select id="selFiltro">
+          <option value="nenhum">Sem filtro (todos os sinais)</option>
+          <option value="A">A · só 1º e 2º sinal do episódio</option>
+          <option value="B">B · atravessa 2 ou 3 médias</option>
+          <option value="C">C · A + B</option>
+          <option value="D">D · C + depois das 10h (operacional proposto)</option>
+          <option value="E">E · C + |MACD| entre 150 e 300</option>
+          <option value="F">F · só |MACD| entre 150 e 300</option>
+        </select>
+      </label>
       <label>Lado
         <span class="chips" id="chLado"><button data-v="VC" class="on">Compra+Venda</button><button data-v="V">Só venda ▼</button><button data-v="C">Só compra ▲</button></span>
       </label>
@@ -108,6 +119,20 @@ details p,details li{color:var(--mut)}
   </div>
 
   <div class="card" id="cardVeredito"></div>
+
+  <div class="card" id="cardOper">
+    <h2>Operacional proposto (D)</h2>
+    <div class="sub">Regra montada olhando a semana 23–27/11 (WINZ26, Renko 23R). Foi escolhida depois de ver os dados, então precisa ser confirmada em semanas novas: este dashboard recalcula tudo com o mesmo filtro quando você carregar a próxima.</div>
+    <ul style="margin:8px 0 8px 18px;padding:0">
+      <li><b>Só o 1º e o 2º sinal</b> do episódio (tijolos de sinal seguidos no mesmo lado). Do 3º em diante o desempenho foi péssimo.</li>
+      <li><b>O fechamento do tijolo atravessa 2 ou 3 médias</b> das 5 (17, 25, 29, 42, 55). Atravessar só 1 ou 4–5 perdeu.</li>
+      <li><b>Somente depois das 10:00</b> (a primeira hora teve 14% de acerto).</li>
+      <li>Stop de 2 tijolos (230 pts) e gain de 5 tijolos (575 pts), como você opera.</li>
+    </ul>
+    <div class="row"><button id="btnOper" class="on">Aplicar operacional D (stop 2 / gain 5)</button>
+      <span class="sub" id="operResumo"></span></div>
+    <div style="margin-top:10px"><img id="imgComo" alt="Print do Profit anotado mostrando como cada sinal é analisado" style="max-width:100%;border-radius:8px;border:1px solid var(--line)" src="https://raw.githubusercontent.com/PedroMateus1991/analise2026/main/imagens/como_analiso_2026-11-23.png" onerror="this.style.display='none'"></div>
+  </div>
 
   <div class="grid2">
     <div class="card" style="margin-top:14px">
@@ -179,7 +204,8 @@ details p,details li{color:var(--mut)}
         <li><b>Base</b>: todos os tijolos de alta (como venda) e de baixa (como compra) sem sinal, na mesma janela. Se o sinal não bate a base, o padrão não adiciona vantagem.</li>
         <li><b>IC 95%</b>: faixa em que a taxa de alvo verdadeira provavelmente está (Wilson). Com poucos trades ela é larga.</li>
         <li><b>Atenção</b>: a grade de payoffs tem 32 combinações; o “melhor” delas em uma semana costuma ser sorte. Só confie em um payoff que se repita em várias semanas.</li>
-        <li>Resultado calculado tick a tick, de 09:00 às 14:00. O histograma do MACD usado nos sinais difere ~47 pts do Profit; sinais com histograma perto de ±60 podem divergir do gráfico.</li>
+        <li>Resultado calculado tick a tick, de 09:00 às 14:00. Os sinais seguem a lógica literal do indicador e foram conferidos com as setas do Profit na segunda 23/11 (candles 24, 28 e 29). O histograma do MACD difere ~47 pts do Profit; sinais com histograma perto de ±60 podem divergir. Em 27/11 o Profit mostrou uma seta a mais (candle 369) que este cálculo não reproduz.</li>
+        <li><b>Filtros de entrada</b> (A a F) são candidatos montados depois de olhar os dados da semana: use-os como hipótese e confirme em semanas novas.</li>
       </ul>
     </details>
   </div>
@@ -214,7 +240,16 @@ function parseCSV(text){
 }
 
 // ---------------------------------------------------------------- estado
-const S0={weeks:{}, semana:null, lado:"VC", dias:null, hora:"9-14", S:2, T:5, rs:0.2, ctr:1, custo:0, conj:"sinais", busca:"", sort:{k:"dia",d:1}};
+const FILTROS={
+  nenhum:r=>true,
+  A:r=>r.seq<=2,
+  B:r=>r.n_emas>=2&&r.n_emas<=3,
+  C:r=>r.seq<=2&&r.n_emas>=2&&r.n_emas<=3,
+  D:r=>r.seq<=2&&r.n_emas>=2&&r.n_emas<=3&&parseInt(r.hora.slice(0,2),10)>=10,
+  E:r=>r.seq<=2&&r.n_emas>=2&&r.n_emas<=3&&Math.abs(r.hist)>=150&&Math.abs(r.hist)<300,
+  F:r=>Math.abs(r.hist)>=150&&Math.abs(r.hist)<300,
+};
+const S0={weeks:{}, semana:null, lado:"VC", dias:null, hora:"9-14", filtro:"nenhum", S:2, T:5, rs:0.2, ctr:1, custo:0, conj:"sinais", busca:"", sort:{k:"dia",d:1}};
 const st=S0;
 
 function addWeek(name,rows){
@@ -240,6 +275,7 @@ function filtered(rows){
   return rows.filter(r=>{
     if(st.dias && !st.dias.has(r.dia)) return false;
     if(st.lado!=="VC" && r.lado!==st.lado) return false;
+    if(!FILTROS[st.filtro](r)) return false;
     const h=parseInt(r.hora.slice(0,2),10);
     return h>=h0 && h<h1;
   });
@@ -301,8 +337,11 @@ function renderVeredito(a,b,S,T,z){
   else if(expR>0){cls="mid";txt="POSITIVO, MAS NÃO CONCLUSIVO";}
   else if(a.hi<a.be){cls="neg";txt="NÃO COMPENSA";}
   else {cls="neg";txt="NÃO COMPENSOU NESTA AMOSTRA";}
+  const posthoc=st.filtro!=="nenhum";
+  if(posthoc && cls==="pos"){cls="mid";txt="POSITIVO, MAS O FILTRO FOI ESCOLHIDO DEPOIS DE VER OS DADOS";}
   const edge=b.n?a.exp-b.exp:NaN;
   const pts=[];
+  if(posthoc) pts.push("Filtro de entrada ativo: ele foi montado olhando estes mesmos dias, então o resultado tende a estar superestimado. Só vale como regra depois de repetir em semanas novas.");
   pts.push(`Taxa de alvo <b>${pct(a.wr)}</b> (IC 95%: ${pct(a.lo)} a ${pct(a.hi)}) contra equilíbrio de <b>${pct(a.be)}</b>.`);
   pts.push(`Expectativa de <b class="${sgn(expR)}">${fmt1(a.exp)} pts</b> por trade = <b class="${sgn(expR)}">${fmtR(expR)}</b> por trade com ${st.ctr} contrato(s) e custo de ${fmtR(st.custo)}.`);
   if(b.n) pts.push(`A base (tijolos sem sinal) fez <b>${fmt1(b.exp)} pts</b> por trade, então o sinal ${edge>0?"adiciona":"retira"} <b class="${sgn(edge)}">${fmt1(Math.abs(edge))} pts</b> por trade em relação a entrar sem o padrão.`);
@@ -454,6 +493,14 @@ function bind(){
   $("inCtr").oninput=e=>{st.ctr=Math.max(1,parseInt(e.target.value)||1);render();};
   $("inCusto").oninput=e=>{st.custo=parseFloat(e.target.value)||0;render();};
   $("selConj").onchange=e=>{st.conj=e.target.value;render();};
+  $("selFiltro").onchange=e=>{st.filtro=e.target.value;render();};
+  $("btnOper").onclick=()=>{
+    st.filtro="D"; st.S=2; st.T=5; st.lado="VC"; st.hora="9-14";
+    $("selFiltro").value="D"; $("selS").value=2; $("selT").value=5;
+    $("chLado").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.v==="VC"));
+    $("chHora").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.v==="9-14"));
+    render(); $("cardVeredito").scrollIntoView({behavior:"smooth",block:"start"});
+  };
   $("selSemana").onchange=e=>{st.semana=e.target.value;fillDias();render();};
   $("inBusca").oninput=e=>{st.busca=e.target.value;renderTabela(filtered(baseRows()).filter(r=>r.sinal!==""),st.S,st.T);};
   $("selTema").onchange=e=>{const v=e.target.value; if(v==="auto")document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme",v); render();};

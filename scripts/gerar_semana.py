@@ -64,14 +64,28 @@ def main():
 
     ticks = {}
     bricks = []
+    prev_close = None
     for d in todos:
         rows = renko.load(os.path.join(args.dados, f"precos_{d}.csv"))
         ts = np.array([seg(t) for t, p, ag in rows], dtype=np.int32)
         ps = np.array([p for t, p, ag in rows], dtype=np.float64)
         ticks[d] = (ts, ps)
-        br, _ = renko.build([(t, p) for t, p, ag in rows], size, None)  # Renko reinicia a cada dia
-        for i, (t, o, c, dr) in enumerate(br, 1):
-            bricks.append(dict(dia=d, idx=i, t=seg(t), o=o, c=c, dir=dr))
+        # a grade do Renko e ancorada no primeiro preco do dia; o gap de abertura e preenchido
+        # com tijolos a partir do fechamento do ultimo tijolo do dia anterior (como o Profit faz).
+        br, _ = renko.build([(t, p) for t, p, ag in rows], size, None)
+        pre = []
+        if prev_close is not None and rows:
+            gap = rows[0][1] - prev_close
+            step = size if gap > 0 else -size
+            cur = prev_close
+            for _ in range(-int(-abs(gap) // size)):  # arredonda para cima (Profit: 790 pts = 7 tijolos de 115)
+                pre.append((rows[0][0], cur, cur + step, 1 if step > 0 else -1))
+                cur += step
+        todos_br = pre + br
+        for i, (t, o, c, dr) in enumerate(todos_br, 1):
+            bricks.append(dict(dia=d, idx=i, t=seg(t), o=o, c=c, dir=dr, gap=i <= len(pre)))
+        if todos_br:
+            prev_close = todos_br[-1][2]
 
     # indicadores (continuam entre os dias)
     e = {n: None for n in (9, 17, 25, 29, 42, 55)}
@@ -87,11 +101,12 @@ def main():
         b["macd"] = m
         b["hist"] = m - sg
 
-    # sinais (logica do ___scalp4_Pedro_2026_; `abertura` tratada como Close)
+    # sinais (logica literal do ___scalp4_Pedro_2026_: `abertura` = abertura do tijolo, validada
+    # contra as setas do Profit na segunda 23/11: candles 24, 28 e 29)
     for b in bricks:
         ee, o, c, h = b["e"], b["o"], b["c"], b["hist"]
-        acima = c > ee[17] or c > ee[25] or c > ee[29] or c > ee[42] or c > ee[55]
-        abaixo = c < ee[17] or c < ee[25] or c < ee[29] or c < ee[42] or c < ee[55]
+        acima = o > ee[17] or c > ee[25] or c > ee[29] or c > ee[42] or c > ee[55]
+        abaixo = o < ee[17] or c < ee[25] or c < ee[29] or c < ee[42] or c < ee[55]
         v = c > o and acima and h < 0 and h < -60 and o <= ee[55] and ee[25] < ee[29]
         k = c < o and abaixo and h > 0 and h > 60 and o >= ee[55] and ee[25] > ee[29]
         b["sig"] = "V" if v else ("C" if k else "")
@@ -158,8 +173,8 @@ def main():
     with open(saida, "w", encoding="utf-8", newline="") as f:
         f.write(";".join(cols) + "\n")
         for b in bricks:
-            if b["dia"] not in dias or not (ini <= b["t"] <= fim):
-                continue
+            if b["dia"] not in dias or not (ini <= b["t"] <= fim) or b["gap"]:
+                continue  # tijolos de gap alimentam as medias mas nao sao operaveis
             lado = b["sig"] or ("V" if b["dir"] == 1 else "C")
             d = desfecho(b, lado)
             if d is None:
