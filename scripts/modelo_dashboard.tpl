@@ -85,6 +85,12 @@ details p,details li{color:var(--mut)}
     </div>
   </div>
 
+  <div class="row" style="margin:6px 0 2px">
+    <button id="abaScalp" class="on">Sinais do scalp4</button>
+    <button id="abaToques">Retorno à média (toques)</button>
+  </div>
+
+  <div id="viewScalp">
   <div class="card">
     <div class="row">
       <label>Stop (tijolos)<select id="selS"></select></label>
@@ -222,8 +228,65 @@ details p,details li{color:var(--mut)}
       </ul>
     </details>
   </div>
+  </div><!-- /viewScalp -->
+
+  <div id="viewToques" hidden>
+    <div class="card">
+      <h2>Retorno à média: vale entrar no toque ou na virada de box?</h2>
+      <div class="sub" id="tqSub"></div>
+      <div class="row" style="margin-top:8px">
+        <label>Entrada
+          <select id="tqEntrada"><option value="a">No toque (ordem limite na média)</option><option value="b">Na virada de box (1º tijolo a favor depois do toque)</option></select></label>
+        <label>Média<select id="tqMedia"></select></label>
+        <label>Lado<select id="tqLado"><option value="">Compra + venda</option><option value="V">Venda ▼ (toque vindo de baixo)</option><option value="C">Compra ▲ (toque vindo de cima)</option></select></label>
+        <label>Horário<select id="tqHora"></select></label>
+        <label>Stop (tijolos)<select id="tqS"></select></label>
+        <label>Gain (tijolos)<select id="tqT"></select></label>
+      </div>
+      <div class="row" style="margin-top:10px;gap:14px">
+        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tqPrim" checked> só o 1º toque de cada movimento</label>
+        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tqMacd"> MACD alinhado</label>
+        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tqVwap"> nível a favor da VWAP diária</label>
+        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tqC42"> preço a favor das médias do 42R</label>
+        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tqIncl"> média inclinada a favor</label>
+        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="tqProx"> 2+ médias juntas (≤ 60 pts)</label>
+      </div>
+      <div class="sub" id="tqPayoff" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card" id="tqVeredito"></div>
+
+    <div class="card">
+      <h2>Ranking: qual média segura mais o preço?</h2>
+      <div class="sub">Usa os filtros acima (menos a média). “Rejeição” = quando a média cai na máxima–mínima de um tijolo só no pavio, % de vezes em que o próximo tijolo não fecha além dela. Clique numa linha para filtrar a média.</div>
+      <div class="scroll"><table id="tqRank"></table></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card" style="margin-top:14px"><h2>Horário (blocos de 30 min)</h2><div class="scroll"><table id="tqHorarios"></table></div></div>
+      <div class="card" style="margin-top:14px"><h2>Quem está por baixo de quem</h2>
+        <div class="sub">Escolha uma média acima. Venda tende a funcionar com a média tocada <b>abaixo</b> da outra; compra com ela <b>acima</b>.</div>
+        <div class="scroll"><table id="tqRel"></table></div></div>
+    </div>
+
+    <div class="card"><h2>Alinhamentos e confluências</h2><div class="grid2" id="tqGrupos" style="margin-top:8px"></div></div>
+
+    <div class="card"><h2>Trades (clique em “gráfico” para conferir)</h2>
+      <div class="scroll" style="max-height:460px;overflow-y:auto"><table id="tqTrades"></table></div></div>
+
+    <div id="tqModal" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;overflow:auto;padding:16px">
+      <div class="card" style="max-width:1000px;margin:20px auto">
+        <div class="row" style="justify-content:space-between"><h2 id="tqModalTit" style="margin:0"></h2><button id="tqFechar">Fechar ✕</button></div>
+        <div id="tqGraf"></div>
+        <div class="sub" id="tqGrafNota"></div>
+        <div id="tqPrint" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div><!-- /viewToques -->
 </div>
 
+<script id="toquesEmbutidos" type="application/json">/*__TOQUES__*/</script>
+<script id="janelasEmbutidas" type="application/json">/*__JANELAS__*/</script>
 <script id="dadosEmbutidos" type="application/json">/*__DADOS__*/</script>
 <script>
 "use strict";
@@ -594,6 +657,210 @@ $("ghBtn").onclick=()=>ghLoad(false);
 fillControls(); bind();
 if($("ghToken").value) ghLoad(true);
 if(Object.keys(st.weeks).length) render(); else $("cardVeredito").innerHTML="<b>Sem dados embutidos.</b> Carregue um arquivo semana_*.csv na seção abaixo.";
+</script>
+<script>
+"use strict";
+// ================================================================= Retorno à média (toques)
+(function(){
+const MEDIAS=["E9","E17","E25","E29","E42","E55","R20_20","R20_72","R42_27","R42_55","R98_27","R98_55","VWAP_D","VWAP_S"];
+const NOME={E9:"MME 9 (23R)",E17:"MME 17 (23R)",E25:"MME 25 (23R)",E29:"MME 29 (23R)",E42:"MME 42 (23R)",E55:"MME 55 (23R)",
+  R20_20:"MME 20 do 20R",R20_72:"MME 72 do 20R (fúcsia/verde)",R42_27:"MME 27 do 42R (azul claro)",R42_55:"MME 55 do 42R (azul claro)",
+  R98_27:"MME 27 do 98R",R98_55:"MME 55 do 98R",VWAP_D:"VWAP diária",VWAP_S:"VWAP semanal"};
+const COR={E9:"#f472b6",E17:"#fb923c",E25:"#facc15",E29:"#a3e635",E42:"#34d399",E55:"#22d3ee",R20_20:"#818cf8",R20_72:"#e879f9",
+  R42_27:"#60a5fa",R42_55:"#38bdf8",R98_27:"#c084fc",R98_55:"#a78bfa",VWAP_D:"#f43f5e",VWAP_S:"#94a3b8"};
+const Z=115, TEXT=new Set(["dia","hora","media","lado","hora_b","cluster","tipo"]);
+const tq={weeks:{},semana:null,entrada:"a",media:"",lado:"",hora:"",S:2,T:5,prim:true,macd:false,vwap:false,c42:false,incl:false,prox:false};
+let JAN=[], lista=[];
+const RAW="https://raw.githubusercontent.com/PedroMateus1991/analise2026/main/imagens/prints/";
+function parse(text){
+  const L=(text||"").replace(/^﻿/,"").trim().split(/\r?\n/); if(L.length<2) return [];
+  const h=L[0].split(";"), out=[];
+  for(let i=1;i<L.length;i++){const p=L[i].split(";"),o={};
+    for(let j=0;j<h.length;j++){const k=h[j],v=p[j]===undefined?"":p[j];o[k]=TEXT.has(k)?v:(v===""?NaN:parseFloat(v.replace(",",".")));}
+    out.push(o);}
+  return out;
+}
+const strip=t=>(t||"").replace(/^\/\*.*?\*\//,"")||"{}";
+try{
+  const d=JSON.parse(strip(document.getElementById("toquesEmbutidos").textContent));
+  for(const k of Object.keys(d)){
+    const ev=parse(d[k].csv); for(const r of ev){r.m30=r.hora.slice(0,2)+(parseInt(r.hora.slice(3,5),10)<30?":00":":30");}
+    tq.weeks[k]={ev,graf:d[k].graf,rej:parse(d[k].rej)};
+  }
+}catch(e){}
+try{JAN=JSON.parse(strip(document.getElementById("janelasEmbutidas").textContent)); if(!Array.isArray(JAN)) JAN=[];}catch(e){JAN=[];}
+const semanas=Object.keys(tq.weeks); tq.semana=semanas[semanas.length-1]||null;
+if(!tq.semana){document.getElementById("abaToques").style.display="none";return;}
+const $q=id=>document.getElementById(id);
+
+function base(sem){
+  const w=tq.weeks[tq.semana]; if(!w) return [];
+  return w.ev.filter(r=>{
+    if(tq.prim && r.cl_ordem!==1 && !(tq.entrada==="b" && r.b_ok===1 && false)) return false;
+    if(sem!=="media" && tq.media && r.media!==tq.media) return false;
+    if(tq.lado && r.lado!==tq.lado) return false;
+    if(sem!=="hora" && tq.hora && r.m30!==tq.hora) return false;
+    if(tq.macd && r.hist_alin!==1) return false;
+    if(tq.vwap && r.vwap_d_alin!==1) return false;
+    if(tq.c42 && r.ctx42!==1) return false;
+    if(tq.incl && r.incl_alin!==1) return false;
+    if(tq.prox && !(r.prox60>=2)) return false;
+    if(tq.entrada==="b" && r.b_ok!==1) return false;
+    return true;
+  });
+}
+const key=()=>`${tq.entrada}_S${tq.S}_T${tq.T}`;
+const res=r=>r[key()];
+function tag(r){const x=res(r);return x===tq.T*Z?"alvo":(x===-tq.S*Z?"stop":"mm");}
+function ts(rows){
+  const n=rows.length; if(!n) return {n:0};
+  const ch=rows.slice().sort((a,b)=>(a.dia+a.hora).localeCompare(b.dia+b.hora));
+  const T=tq.T*Z,S=tq.S*Z; let w=0,l=0,mm=0,sum=0,gp=0,gl=0,cum=0,peak=0,dd=0,run=0,mx=0; const dias={};
+  for(const r of ch){const x=res(r); sum+=x; if(x===T)w++; else if(x===-S)l++; else mm++; if(x>0)gp+=x; else gl-=x;
+    cum+=x; peak=Math.max(peak,cum); dd=Math.max(dd,peak-cum); if(x<0){run++;mx=Math.max(mx,run);}else run=0; dias[r.dia]=(dias[r.dia]||0)+x;}
+  const be=tq.S/(tq.S+tq.T), ci=wilson(w,n);
+  return {n,w,l,mm,sum,exp:sum/n,pf:gl>0?gp/gl:Infinity,wr:w/n,be,lo:ci[0],hi:ci[1],dd,mx,pos:Object.values(dias).filter(v=>v>0).length,nd:Object.keys(dias).length,ch};
+}
+const kp=(l,v,s,c)=>`<div class="kpi"><div class="l">${l}</div><div class="v ${c||""}">${v}</div><div class="s">${s||""}</div></div>`;
+
+function veredito(rows,a){
+  const el=$q("tqVeredito");
+  if(!a.n){el.innerHTML="<b>Sem trades com estes filtros.</b>";return;}
+  const expR=money(a.exp)-st.custo, indep=new Set(rows.map(r=>r.cluster)).size;
+  const posthoc=!!(tq.media||tq.lado||tq.hora||tq.macd||tq.vwap||tq.c42||tq.incl||tq.prox);
+  let cls,txt;
+  if(expR>0&&a.lo>a.be){cls="pos";txt="COMPENSA (com evidência)";}
+  else if(expR>0){cls="mid";txt="POSITIVO, MAS NÃO CONCLUSIVO";}
+  else if(a.hi<a.be){cls="neg";txt="NÃO COMPENSA";}
+  else{cls="neg";txt="NÃO COMPENSOU NESTA AMOSTRA";}
+  if(posthoc&&cls==="pos"){cls="mid";txt="POSITIVO, MAS O FILTRO FOI ESCOLHIDO DEPOIS DE VER OS DADOS";}
+  const pts=[];
+  pts.push(`Entrada <b>${tq.entrada==="a"?"no toque":"na virada de box"}</b> · stop ${tq.S*Z} pts / gain ${tq.T*Z} pts · equilíbrio <b>${pct(a.be)}</b>.`);
+  pts.push(`Taxa de alvo <b>${pct(a.wr)}</b> (IC 95%: ${pct(a.lo)} a ${pct(a.hi)}); expectativa <b class="${sgn(expR)}">${fmt1(a.exp)} pts</b> = <b class="${sgn(expR)}">${fmtR(expR)}</b> por trade.`);
+  pts.push(`<b>${a.n}</b> trade(s) em <b>${indep}</b> movimento(s) independente(s). ${tq.prim?"Contando só o 1º toque de cada movimento.":"<b>Atenção:</b> sem a opção “só o 1º toque”, o mesmo movimento é contado várias vezes e os números ficam inflados."}`);
+  if(a.n<30) pts.push(`<b>Amostra pequena</b> (${a.n} trades).`);
+  if(posthoc) pts.push("Há filtros ativos escolhidos depois de olhar esta semana: trate como hipótese e confirme em semanas novas.");
+  el.innerHTML=`<div class="verdict"><div class="vbadge ${cls}">${txt}</div><div class="vtext"><ul>${pts.map(x=>`<li>${x}</li>`).join("")}</ul></div></div>
+  <div class="kpis">${kp("Trades",a.n,`${a.w} alvos · ${a.l} stops · ${a.mm} a mercado`)}${kp("Taxa de alvo",pct(a.wr),"equilíbrio "+pct(a.be),a.wr>=a.be?"pos":"neg")}
+  ${kp("Expectativa (pts)",fmt1(a.exp),fmtR(expR)+" por trade",sgn(expR))}${kp("Resultado total",fmt0(a.sum)+" pts",fmtR(money(a.sum)-st.custo*a.n),sgn(a.sum))}
+  ${kp("Fator de lucro",isFinite(a.pf)?a.pf.toLocaleString("pt-BR",{maximumFractionDigits:2}):"∞","ganhos ÷ perdas",a.pf>=1?"pos":"neg")}
+  ${kp("Maior queda",fmt0(a.dd)+" pts",fmtR(money(a.dd)),"neg")}${kp("Stops seguidos",a.mx,"sequência mais longa")}${kp("Dias positivos",a.pos+"/"+a.nd,"")}</div>`;
+}
+
+function barra(v,mx){return `<span class="bar" style="width:${Math.round(60*Math.abs(v)/(mx||1))}px;background:${v>=0?"var(--pos)":"var(--neg)"}"></span>`;}
+function rank(){
+  const rows=base("media"), w=tq.weeks[tq.semana], rej={};
+  for(const r of w.rej){const a=rej[r.media]||(rej[r.media]={pav:0,ok:0,alem:0}); if(r.tipo!=="corpo"){a.pav++; if(!isNaN(r.fecha_alem)){a.ok++;a.alem+=r.fecha_alem;}}}
+  const L=MEDIAS.map(m=>{const it=rows.filter(r=>r.media===m);const s=ts(it);
+    const h1=it.length?it.reduce((x,r)=>x+r.held1,0)/it.length:NaN,h2=it.length?it.reduce((x,r)=>x+r.held2,0)/it.length:NaN;
+    const rj=rej[m]&&rej[m].ok?1-rej[m].alem/rej[m].ok:NaN;return {m,s,h1,h2,rj,nrj:rej[m]?rej[m].ok:0};});
+  L.sort((a,b)=>(b.s.n?b.s.exp:-1e9)-(a.s.n?a.s.exp:-1e9));
+  const mx=Math.max(1,...L.map(x=>x.s.n?Math.abs(x.s.exp):0));
+  $q("tqRank").innerHTML=`<tr><th>Média</th><th>n</th><th>acerto</th><th>exp. pts</th><th></th><th>dias+</th><th>1 tij a favor antes de 1 contra</th><th>2 a favor antes de 1 contra</th><th>rejeição no pavio</th></tr>`+
+   L.map(x=>`<tr class="${x.s.n<8?"small":""}" data-m="${x.m}" style="cursor:pointer${tq.media===x.m?";background:var(--posbg)":""}"><td>${NOME[x.m]}</td><td>${x.s.n||0}</td><td class="${x.s.n&&x.s.wr>=x.s.be?"pos":"neg"}">${x.s.n?pct(x.s.wr):"—"}</td><td class="${sgn(x.s.exp)}">${x.s.n?fmt0(x.s.exp):"—"}</td><td style="text-align:left">${x.s.n?barra(x.s.exp,mx):""}</td><td>${x.s.n?x.s.pos+"/"+x.s.nd:"—"}</td><td>${isNaN(x.h1)?"—":pct(x.h1)}</td><td>${isNaN(x.h2)?"—":pct(x.h2)}</td><td>${isNaN(x.rj)?"—":pct(x.rj)+` <span class="sub">(n=${x.nrj})</span>`}</td></tr>`).join("");
+  $q("tqRank").querySelectorAll("tr[data-m]").forEach(tr=>tr.onclick=()=>{tq.media=tq.media===tr.dataset.m?"":tr.dataset.m;$q("tqMedia").value=tq.media;renderTq();});
+}
+function horarios(){
+  const rows=base("hora"), bs=[...new Set(tq.weeks[tq.semana].ev.map(r=>r.m30))].sort();
+  const L=bs.map(b=>({b,s:ts(rows.filter(r=>r.m30===b))})); const mx=Math.max(1,...L.map(x=>x.s.n?Math.abs(x.s.exp):0));
+  $q("tqHorarios").innerHTML=`<tr><th>Bloco</th><th>n</th><th>acerto</th><th>exp. pts</th><th></th><th>dias+</th></tr>`+L.map(x=>`<tr class="${x.s.n<8?"small":""}" data-b="${x.b}" style="cursor:pointer${tq.hora===x.b?";background:var(--posbg)":""}"><td>${x.b}–${(()=>{const h=parseInt(x.b.slice(0,2),10),m=x.b.slice(3)==="00"?"30":"00";return String(m==="00"?h+1:h).padStart(2,"0")+":"+m;})()}</td><td>${x.s.n||0}</td><td class="${x.s.n&&x.s.wr>=x.s.be?"pos":"neg"}">${x.s.n?pct(x.s.wr):"—"}</td><td class="${sgn(x.s.exp)}">${x.s.n?fmt0(x.s.exp):"—"}</td><td style="text-align:left">${x.s.n?barra(x.s.exp,mx):""}</td><td>${x.s.n?x.s.pos+"/"+x.s.nd:"—"}</td></tr>`).join("");
+  $q("tqHorarios").querySelectorAll("tr[data-b]").forEach(tr=>tr.onclick=()=>{tq.hora=tq.hora===tr.dataset.b?"":tr.dataset.b;$q("tqHora").value=tq.hora;renderTq();});
+}
+function relacao(){
+  const el=$q("tqRel");
+  if(!tq.media){el.innerHTML=`<tr><td style="text-align:left;color:var(--mut)">Escolha uma média no filtro acima (ou clique numa linha do ranking).</td></tr>`;return;}
+  const rows=base(null);
+  const L=MEDIAS.filter(y=>y!==tq.media).map(y=>({y,b:ts(rows.filter(r=>r["rel_"+y]===-1)),c:ts(rows.filter(r=>r["rel_"+y]===1))}));
+  const cel=s=>s.n?`<td>${s.n}</td><td class="${s.wr>=s.be?"pos":"neg"}">${pct(s.wr)}</td><td class="${sgn(s.exp)}">${fmt0(s.exp)}</td>`:`<td>0</td><td>—</td><td>—</td>`;
+  el.innerHTML=`<tr><th>Outra média (Y)</th><th colspan="3">${NOME[tq.media]} ABAIXO de Y</th><th colspan="3">… ACIMA de Y</th></tr><tr><th></th><th>n</th><th>acerto</th><th>exp.</th><th>n</th><th>acerto</th><th>exp.</th></tr>`+L.map(x=>`<tr class="${x.b.n+x.c.n<10?"small":""}"><td>${NOME[x.y]}</td>${cel(x.b)}${cel(x.c)}</tr>`).join("");
+}
+function grupos(){
+  const rows=base(null), G=[];
+  const g=(tit,fn,ord)=>{const m=new Map();for(const r of rows){const k=fn(r);if(k===null||k===undefined)continue;if(!m.has(k))m.set(k,[]);m.get(k).push(r);}
+    const keys=ord?ord.filter(k=>m.has(k)):[...m.keys()].sort();const L=keys.map(k=>[k,ts(m.get(k))]);const mx=Math.max(1,...L.map(([k,s])=>Math.abs(s.exp)));
+    G.push(`<div class="scroll"><h2 style="font-size:13px">${tit}</h2><table><tr><th></th><th>n</th><th>acerto</th><th>exp. pts</th><th></th></tr>${L.map(([k,s])=>`<tr class="${s.n<10?"small":""}"><td>${k}</td><td>${s.n}</td><td class="${s.wr>=s.be?"pos":"neg"}">${pct(s.wr)}</td><td class="${sgn(s.exp)}">${fmt0(s.exp)}</td><td style="text-align:left">${barra(s.exp,mx)}</td></tr>`).join("")}</table></div>`);};
+  const sn=v=>v===1?"sim":(v===0?"não":null), tri=v=>v===1?"a favor":(v===0?"entre as médias":"contra");
+  g("MACD alinhado (hist<0 na venda, >0 na compra)",r=>sn(r.hist_alin),["sim","não"]);
+  g("MACD crescendo a favor",r=>sn(r.hist_cresce),["sim","não"]);
+  g("Média tocada inclinada a favor",r=>sn(r.incl_alin),["sim","não"]);
+  g("Nível a favor da VWAP diária",r=>isNaN(r.vwap_d_alin)?null:sn(r.vwap_d_alin),["sim","não"]);
+  g("VWAP diária junto do nível (≤ 60 pts)",r=>isNaN(r.vwap_d_dist)?null:(Math.abs(r.vwap_d_dist)<=60?"junto":"longe"),["junto","longe"]);
+  g("Nível a favor da VWAP semanal",r=>isNaN(r.vwap_s_alin)?null:sn(r.vwap_s_alin),["sim","não"]);
+  g("42R (azul claro): preço × médias 27 e 55",r=>tri(r.ctx42),["a favor","entre as médias","contra"]);
+  g("98R: preço × médias 27 e 55",r=>tri(r.ctx98),["a favor","entre as médias","contra"]);
+  g("Scalp4 do mesmo lado nos últimos 5 tijolos",r=>r.scalp4===1?"sim":"não",["sim","não"]);
+  g("Operacional D recente",r=>r.scalpD===1?"sim":"não",["sim","não"]);
+  g("Outras médias/VWAP a ≤ 60 pts (confluência)",r=>r.prox60===0?"nenhuma":(r.prox60===1?"1":(r.prox60<=3?"2-3":"4 ou mais")),["nenhuma","1","2-3","4 ou mais"]);
+  g("Médias tocadas no mesmo movimento",r=>r.cluster_n===1?"1":(r.cluster_n<=3?"2-3":(r.cluster_n<=6?"4-6":"7 ou mais")),["1","2-3","4-6","7 ou mais"]);
+  g("Distância percorrida antes do toque",r=>r.dist_antes<230?"115–230":(r.dist_antes<460?"230–460":"460 ou mais"),["115–230","230–460","460 ou mais"]);
+  g("Lado",r=>r.lado==="V"?"Venda ▼ (resistência)":"Compra ▲ (suporte)",["Venda ▼ (resistência)","Compra ▲ (suporte)"]);
+  $q("tqGrupos").innerHTML=G.join("");
+}
+function trades(){
+  const rows=base(null).slice().sort((a,b)=>(a.dia+a.hora).localeCompare(b.dia+b.hora)); lista=rows;
+  $q("tqTrades").innerHTML=`<tr><th>Dia</th><th>Hora</th><th>Média</th><th>Lado</th><th>Nível</th><th>Resultado</th><th>Pts</th><th>Juntas</th><th>MACD</th><th>VWAP D</th><th>42R</th><th></th></tr>`+
+   rows.map((r,i)=>{const t=tag(r),x=res(r);return `<tr><td>${r.dia.slice(5)}</td><td>${r.hora}</td><td>${NOME[r.media]}</td><td>${r.lado==="V"?"▼":"▲"}</td><td>${fmt0(r.nivel)}</td><td class="tag-${t}">${t}</td><td class="${sgn(x)}">${fmt0(x)}</td><td>${r.prox60}</td><td>${r.hist_alin===1?"sim":"não"}</td><td>${isNaN(r.vwap_d_alin)?"—":(r.vwap_d_alin===1?"a favor":"contra")}</td><td>${r.ctx42===1?"a favor":(r.ctx42===0?"entre":"contra")}</td><td><button data-i="${i}">gráfico</button></td></tr>`;}).join("");
+  $q("tqTrades").querySelectorAll("button[data-i]").forEach(b=>b.onclick=()=>abrir(lista[+b.dataset.i]));
+}
+const secOf=h=>{const p=h.split(":");return (+p[0])*3600+(+p[1])*60+(+p[2]);};
+const hms=s=>String(Math.floor(s/3600)).padStart(2,"0")+":"+String(Math.floor(s%3600/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+function abrir(r){
+  const g=tq.weeks[tq.semana].graf[r.dia]; if(!g) return;
+  const k=r.idx-1, n=g.t.length, k0=Math.max(0,k-28), k1=Math.min(n-1,k+48);
+  const entB=tq.entrada==="b"&&r.entrada_b!==""&&!isNaN(r.entrada_b), e=entB?r.entrada_b:r.nivel;
+  const stopL=r.lado==="V"?e+tq.S*Z:e-tq.S*Z, gainL=r.lado==="V"?e-tq.T*Z:e+tq.T*Z;
+  const nomes=[r.media].concat(["VWAP_D","E9","E25","E55","R42_27","R42_55"].filter(x=>x!==r.media));
+  let mn=1e12,mx=-1e12;
+  for(let i=k0;i<=k1;i++){mn=Math.min(mn,g.l[i]);mx=Math.max(mx,g.h[i]);}
+  const span0=mx-mn;
+  for(const nm of nomes){for(let i=k0;i<=k1;i++){const v=g.med[nm][i];if(v!=null&&v>mn-span0&&v<mx+span0){mn=Math.min(mn,v);mx=Math.max(mx,v);}}}
+  mn=Math.min(mn,stopL,gainL,r.nivel);mx=Math.max(mx,stopL,gainL,r.nivel);
+  const W=960,H=430,pl=62,pr=14,pt=12,pb=28,dx=(W-pl-pr)/(k1-k0+1),X=i=>pl+(i-k0)*dx+dx/2,Y=v=>pt+(H-pt-pb)*(1-(v-mn)/((mx-mn)||1));
+  let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img">`;
+  for(let t=0;t<=5;t++){const v=mn+(mx-mn)*t/5;s+=`<line x1="${pl}" x2="${W-pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${pl-5}" y="${Y(v)+4}" text-anchor="end">${fmt0(v)}</text>`;}
+  for(let i=k0;i<=k1;i+=Math.ceil((k1-k0)/9))s+=`<text x="${X(i)}" y="${H-8}" text-anchor="middle">${hms(g.t[i]).slice(0,5)}</text>`;
+  for(const nm of nomes){let d="",pen=false;for(let i=k0;i<=k1;i++){const v=g.med[nm][i];if(v==null||v<mn-1||v>mx+1){pen=false;continue;}d+=(pen?"L":"M")+X(i).toFixed(1)+","+Y(v).toFixed(1)+" ";pen=true;}
+    s+=`<path d="${d}" fill="none" stroke="${COR[nm]}" stroke-width="${nm===r.media?3:1.4}" ${nm.startsWith("VWAP")?'stroke-dasharray="6 4"':""} opacity="${nm===r.media?1:.8}"/>`;}
+  for(let i=k0;i<=k1;i++){const up=g.c[i]>g.o[i],c=up?"#3b82f6":"#d4a72c",x=X(i),bt=Y(Math.max(g.o[i],g.c[i])),bb=Y(Math.min(g.o[i],g.c[i]));
+    s+=`<g opacity="${g.gap[i]?.4:1}"><line x1="${x}" x2="${x}" y1="${Y(g.h[i])}" y2="${Y(g.l[i])}" stroke="${c}"/><rect x="${x-dx*.32}" y="${bt}" width="${dx*.64}" height="${Math.max(1.5,bb-bt)}" fill="${c}"><title>${hms(g.t[i])} abre ${g.o[i]} fecha ${g.c[i]}</title></rect></g>`;}
+  const xk=X(k), corE=r.lado==="V"?"#ef4444":"#22c55e";
+  s+=`<line x1="${xk}" x2="${xk}" y1="${pt}" y2="${H-pb}" stroke="var(--mut)" stroke-dasharray="3 3"/>`;
+  s+=`<circle cx="${xk}" cy="${Y(r.nivel)}" r="6" fill="none" stroke="${corE}" stroke-width="2.5"/><text x="${xk+9}" y="${Y(r.nivel)-8}" style="fill:${corE};font-weight:700">toque ${r.hora}</text>`;
+  if(entB){const kb=g.t.findIndex(t=>t>=secOf(r.hora_b));if(kb>=k0&&kb<=k1){s+=`<circle cx="${X(kb)}" cy="${Y(e)}" r="6" fill="${corE}"/><text x="${X(kb)+9}" y="${Y(e)+16}" style="fill:${corE};font-weight:700">virada ${r.hora_b}</text>`;}}
+  const xs=entB?xk:xk;
+  s+=`<line x1="${xs}" x2="${W-pr}" y1="${Y(stopL)}" y2="${Y(stopL)}" stroke="#ef4444" stroke-dasharray="5 4"/><text x="${W-pr-4}" y="${Y(stopL)-4}" text-anchor="end" style="fill:#ef4444">stop ${tq.S*Z} pts (${fmt0(stopL)})</text>`;
+  s+=`<line x1="${xs}" x2="${W-pr}" y1="${Y(gainL)}" y2="${Y(gainL)}" stroke="#22c55e" stroke-dasharray="5 4"/><text x="${W-pr-4}" y="${Y(gainL)-4}" text-anchor="end" style="fill:#22c55e">gain ${tq.T*Z} pts (${fmt0(gainL)})</text></svg>`;
+  $q("tqModalTit").textContent=`${r.dia.slice(8)}/${r.dia.slice(5,7)} ${r.hora} · ${NOME[r.media]} · ${r.lado==="V"?"venda":"compra"} · ${tag(r)} (${fmt0(res(r))} pts)`;
+  $q("tqGraf").innerHTML=s+`<div class="legend">`+nomes.map(nm=>`<span style="color:${COR[nm]}">━</span> ${NOME[nm]} (${g.med[nm][k]==null?"—":fmt0(g.med[nm][k])})`).join(" &nbsp; ")+`</div>`;
+  $q("tqGrafNota").innerHTML=`Tijolos de 115 pts (azul = alta, amarelo = baixa, esmaecido = tijolo de gap de abertura). As linhas são as médias no nível em que estavam quando o tijolo se formou. Entrada ${entB?"na virada":"no toque (ordem limite no nível da média)"}; stop e gain medidos a partir dela. Tijolo nº ${r.idx} do dia. Confira no seu Profit pelo horário.`;
+  const hh=r.hora.slice(0,5), j=JAN.find(w=>w.trechos.some(t=>t.dia===r.dia&&t.t0<=hh&&hh<=t.t1));
+  $q("tqPrint").innerHTML=j?`<div class="sub">Captura do Profit que cobre este horário (${j.titulo}). Procure o toque às <b>${r.hora}</b> (tijolo nº ${r.idx}):</div><a href="${RAW}${j.id}.png" target="_blank" rel="noopener"><img loading="lazy" src="${RAW}${j.id}.png" alt="Captura do Profit ${j.id}" style="max-width:100%;border-radius:8px;border:1px solid var(--line)" onerror="this.parentNode.style.display='none'"></a>`:`<div class="sub">Sem captura do Profit para este horário.</div>`;
+  $q("tqModal").hidden=false;
+}
+function renderTq(){
+  const rows=base(null), a=ts(rows);
+  const w=tq.weeks[tq.semana], nev=w.ev.length, ncl=new Set(w.ev.map(r=>r.cluster)).size;
+  $q("tqSub").textContent=`${semanas.join(" · ")} · ${nev} toques detectados = ${ncl} movimentos independentes · janela 09:00–14:00 · 14 médias (23R, 20R, 42R, 98R e VWAP)`;
+  $q("tqPayoff").innerHTML=`Stop <b>${tq.S*Z} pts</b> (${fmtR(money(tq.S*Z))}) · gain <b>${tq.T*Z} pts</b> (${fmtR(money(tq.T*Z))}) · equilíbrio <b>${pct(tq.S/(tq.S+tq.T))}</b>. Valor do ponto, contratos e custo vêm da aba “Sinais do scalp4”.`;
+  veredito(rows,a); rank(); horarios(); relacao(); grupos(); trades();
+}
+function init(){
+  $q("tqMedia").innerHTML=`<option value="">Todas</option>`+MEDIAS.map(m=>`<option value="${m}">${NOME[m]}</option>`).join("");
+  const bs=[...new Set(tq.weeks[tq.semana].ev.map(r=>r.m30))].sort();
+  $q("tqHora").innerHTML=`<option value="">9h às 14h</option>`+bs.map(b=>`<option value="${b}">${b}</option>`).join("");
+  $q("tqS").innerHTML=[1,2,3,4].map(v=>`<option value="${v}">${v} tijolo(s)</option>`).join(""); $q("tqS").value=2;
+  $q("tqT").innerHTML=[1,2,3,4,5,6,8,10].map(v=>`<option value="${v}">${v} tijolo(s)</option>`).join(""); $q("tqT").value=5;
+  const sel=(id,k,num)=>{$q(id).onchange=e=>{tq[k]=num?+e.target.value:e.target.value;renderTq();};};
+  sel("tqEntrada","entrada"); sel("tqMedia","media"); sel("tqLado","lado"); sel("tqHora","hora"); sel("tqS","S",true); sel("tqT","T",true);
+  for(const [id,k] of [["tqPrim","prim"],["tqMacd","macd"],["tqVwap","vwap"],["tqC42","c42"],["tqIncl","incl"],["tqProx","prox"]]) $q(id).onchange=e=>{tq[k]=e.target.checked;renderTq();};
+  $q("tqFechar").onclick=()=>{$q("tqModal").hidden=true;};
+  $q("tqModal").onclick=e=>{if(e.target===$q("tqModal"))$q("tqModal").hidden=true;};
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")$q("tqModal").hidden=true;});
+  const show=t=>{$q("viewScalp").hidden=t;$q("viewToques").hidden=!t;$q("abaScalp").classList.toggle("on",!t);$q("abaToques").classList.toggle("on",t);if(t)renderTq();};
+  $q("abaScalp").onclick=()=>show(false); $q("abaToques").onclick=()=>show(true);
+}
+init();
+})();
 </script>
 </body>
 </html>

@@ -8,7 +8,7 @@ Análise semanal do padrão `___scalp4_Pedro_2026_` no WINFUT (Renko), com dashb
 |---|---|
 | `semanas/semana_<1º dia>_<N>R.csv` | CSV consolidado de cada semana (um tijolo por linha, com e sem sinal). É o que o dashboard lê. |
 | `dados/precos_AAAA-MM-DD.csv` | Preços do dia reduzidos (só mudanças de preço, ordem cronológica). |
-| `scripts/` | `reduce.py`, `renko.py`, `gerar_semana.py`, `gerar_dashboard.py`, `modelo_dashboard.tpl` (modelo interno do dashboard, não é para abrir), `analise_medias.py` (estudo das médias e filtros) `avaliar_operacional.py` (mede os candidatos de operacional), `htf.py` (médias 27 e 55 do 42R e do 98R), `analise_contexto.py` (efeito do 42R/98R a favor ou contra) e `anotar_prints.py` (anota as capturas do Profit com as setas e os sinais calculados). |
+| `scripts/` | `reduce.py`, `renko.py`, `gerar_semana.py`, `gerar_dashboard.py`, `modelo_dashboard.tpl` (modelo interno do dashboard, não é para abrir), `analise_medias.py` (estudo das médias e filtros) `avaliar_operacional.py` (mede os candidatos de operacional), `htf.py` (médias 27 e 55 do 42R e do 98R), `analise_contexto.py` (efeito do 42R/98R a favor ou contra) `anotar_prints.py` (anota as capturas do Profit com as setas e os sinais calculados), `toques.py` (retorno às médias: detecta os toques em 14 médias/VWAPs e simula a entrada no toque e na virada de box) e `analise_toques.py` (ranking das médias, horários, confluências). |
 | `imagens/` | Print do Profit anotado mostrando como cada sinal é analisado. `imagens/prints/` traz as 14 capturas anotadas de 23 a 27/11 e `conferencia_setas.csv`. |
 | `dashboard.html` | Dashboard. Abre no navegador, carrega as semanas deste repositório e aceita arrastar um CSV. |
 
@@ -30,6 +30,14 @@ Análise semanal do padrão `___scalp4_Pedro_2026_` no WINFUT (Renko), com dashb
 ## Operacional proposto (semana 23–27/11/2026, 23R)
 
 Só o 1º e o 2º sinal do episódio, fechamento atravessando 2 ou 3 médias, depois das 10:00, stop 230 / gain 575: 25 trades, 48% de acerto, +167 pts por trade, positivo nos 5 dias. Foi escolhido olhando a mesma semana, então precisa ser confirmado em semanas novas (`python -I scripts/avaliar_operacional.py <csv>` mede os mesmos candidatos sem reotimizar).
+
+## Retorno à média (aba "Retorno à média" do dashboard)
+
+- Médias: MME 9, 17, 25, 29, 42 e 55 do 23R; MME 20 e 72 do 20R; MME 27 e 55 do 42R e do 98R; VWAP diária e semanal (calculada dos dados de 1 minuto, validada contra o Profit).
+- Toque: o preço estava a ≥ 1 tijolo da média (2 tijolos fechados do mesmo lado) e volta a encostar. Entrada no toque = ordem limite no nível; entrada na virada = 1º tijolo a favor depois do toque (se a média não foi rompida por 2 tijolos).
+- Vários toques no mesmo movimento (até 5 min, mesmo lado) formam um cluster: use "só o 1º toque" para não contar a mesma subida várias vezes (373 toques = 137 movimentos na semana 23–27/11).
+- Cada trade tem um gráfico reconstruído e o link da captura do Profit que cobre o horário.
+- `python -I scripts/toques.py --dias <d1,d2,...>` gera `semanas/toques_*.csv`, `rejeicao_*.csv` e `toques_graficos_*.json` (precisa de `dados/WINZ26_F_0_1min_*.csv` para a VWAP).
 
 ## Limitações
 
