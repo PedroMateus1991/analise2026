@@ -287,6 +287,7 @@ details p,details li{color:var(--mut)}
 
 <script id="toquesEmbutidos" type="application/json">/*__TOQUES__*/</script>
 <script id="janelasEmbutidas" type="application/json">/*__JANELAS__*/</script>
+<script id="marcadosEmbutidos" type="application/json">/*__MARCADOS__*/</script>
 <script id="dadosEmbutidos" type="application/json">/*__DADOS__*/</script>
 <script>
 "use strict";
@@ -688,6 +689,7 @@ try{
     tq.weeks[k]={ev,graf:d[k].graf,rej:parse(d[k].rej)};
   }
 }catch(e){}
+let MARC={}; try{MARC=JSON.parse(strip(document.getElementById("marcadosEmbutidos").textContent))||{};}catch(e){MARC={};}
 try{JAN=JSON.parse(strip(document.getElementById("janelasEmbutidas").textContent)); if(!Array.isArray(JAN)) JAN=[];}catch(e){JAN=[];}
 const semanas=Object.keys(tq.weeks); tq.semana=semanas[semanas.length-1]||null;
 if(!tq.semana){document.getElementById("abaToques").style.display="none";return;}
@@ -834,7 +836,9 @@ function abrir(r){
   $q("tqGraf").innerHTML=s+`<div class="legend">`+nomes.map(nm=>`<span style="color:${COR[nm]}">━</span> ${NOME[nm]} (${g.med[nm][k]==null?"—":fmt0(g.med[nm][k])})`).join(" &nbsp; ")+`</div>`;
   $q("tqGrafNota").innerHTML=`Tijolos de 115 pts (azul = alta, amarelo = baixa, esmaecido = tijolo de gap de abertura). As linhas são as médias no nível em que estavam quando o tijolo se formou. Entrada ${entB?"na virada":"no toque (ordem limite no nível da média)"}; stop e gain medidos a partir dela. Tijolo nº ${r.idx} do dia. Confira no seu Profit pelo horário.`;
   const hh=r.hora.slice(0,5), j=JAN.find(w=>w.trechos.some(t=>t.dia===r.dia&&t.t0<=hh&&hh<=t.t1));
-  $q("tqPrint").innerHTML=j?`<div class="sub">Captura do Profit que cobre este horário (${j.titulo}). Procure o toque às <b>${r.hora}</b> (tijolo nº ${r.idx}):</div><a href="${RAW}${j.id}.png" target="_blank" rel="noopener"><img loading="lazy" src="${RAW}${j.id}.png" alt="Captura do Profit ${j.id}" style="max-width:100%;border-radius:8px;border:1px solid var(--line)" onerror="this.parentNode.style.display='none'"></a>`:`<div class="sub">Sem captura do Profit para este horário.</div>`;
+  const mk=MARC[r.dia+" "+r.hora+" "+r.media];
+  if(mk){const u=RAW+"toques/"+mk+".png"; $q("tqPrint").innerHTML=`<div class="sub">Captura do Profit com este trade marcado (círculo numerado, às <b>${r.hora}</b>, no nível da ${NOME[r.media]}). A posição vem do horário e do nível, então é aproximada:</div><a href="${u}" target="_blank" rel="noopener"><img loading="lazy" src="${u}" alt="Captura do Profit ${mk}" style="max-width:100%;border-radius:8px;border:1px solid var(--line)" onerror="this.parentNode.style.display='none'"></a>`;}
+  else $q("tqPrint").innerHTML=j?`<div class="sub">Captura do Profit que cobre este horário (${j.titulo}). Procure o toque às <b>${r.hora}</b> (tijolo nº ${r.idx}):</div><a href="${RAW}${j.id}.png" target="_blank" rel="noopener"><img loading="lazy" src="${RAW}${j.id}.png" alt="Captura do Profit ${j.id}" style="max-width:100%;border-radius:8px;border:1px solid var(--line)" onerror="this.parentNode.style.display='none'"></a>`:`<div class="sub">Sem captura do Profit para este horário.</div>`;
   $q("tqModal").hidden=false;
 }
 function renderTq(){

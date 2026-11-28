@@ -36,6 +36,7 @@ Só o 1º e o 2º sinal do episódio, fechamento atravessando 2 ou 3 médias, de
 - Médias: MME 9, 17, 25, 29, 42 e 55 do 23R; MME 20 e 72 do 20R; MME 27 e 55 do 42R e do 98R; VWAP diária e semanal (calculada dos dados de 1 minuto, validada contra o Profit).
 - Toque: o preço estava a ≥ 1 tijolo da média (2 tijolos fechados do mesmo lado) e volta a encostar. Entrada no toque = ordem limite no nível; entrada na virada = 1º tijolo a favor depois do toque (se a média não foi rompida por 2 tijolos).
 - Vários toques no mesmo movimento (até 5 min, mesmo lado) formam um cluster: use "só o 1º toque" para não contar a mesma subida várias vezes (373 toques = 137 movimentos na semana 23–27/11).
+- `python -I scripts/anotar_trades.py` marca nas capturas do Profit (`imagens/prints/toques/`) os 28 trades de venda no toque de média lenta (posição aproximada: horário do eixo + nível da média); o dashboard mostra essa captura ao abrir o trade.
 - Cada trade tem um gráfico reconstruído e o link da captura do Profit que cobre o horário.
 - `python -I scripts/toques.py --dias <d1,d2,...>` gera `semanas/toques_*.csv`, `rejeicao_*.csv` e `toques_graficos_*.json` (precisa de `dados/WINZ26_F_0_1min_*.csv` para a VWAP).
 

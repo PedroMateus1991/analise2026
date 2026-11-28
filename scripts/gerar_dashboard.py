@@ -46,6 +46,12 @@ if os.path.exists(jan):
     with open(jan, encoding="utf-8") as f:
         janelas = json.load(f)
 html = html.replace("/*__JANELAS__*/", json.dumps(janelas, ensure_ascii=False).replace("</", "<\\/"))
+mar = os.path.join(RAIZ, "imagens", "prints", "toques", "trades_marcados.json")
+marcados = {}
+if os.path.exists(mar):
+    with open(mar, encoding="utf-8") as f:
+        marcados = json.load(f)
+html = html.replace("/*__MARCADOS__*/", json.dumps(marcados, ensure_ascii=False).replace("</", "<\/"))
 print(f"  toques: {len(toques)} semana(s) | capturas indexadas: {len(janelas)}")
 saida = os.path.join(RAIZ, "dashboard.html")
 with open(saida, "w", encoding="utf-8") as f:
