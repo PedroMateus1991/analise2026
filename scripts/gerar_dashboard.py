@@ -18,7 +18,7 @@ for caminho in sorted(glob.glob(os.path.join(RAIZ, "semanas", "semana_*.csv"))):
     nome = f"{prim[0]} · {prim[2]}R" if len(prim) > 2 else os.path.basename(caminho)
     dados[nome] = txt
 
-with open(os.path.join(AQUI, "dashboard_template.html"), encoding="utf-8") as f:
+with open(os.path.join(AQUI, "modelo_dashboard.tpl"), encoding="utf-8") as f:
     html = f.read()
 
 blob = json.dumps(dados, ensure_ascii=False).replace("</", "<\\/")
