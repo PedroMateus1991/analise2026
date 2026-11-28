@@ -86,11 +86,38 @@ details p,details li{color:var(--mut)}
   </div>
 
   <div class="row" style="margin:6px 0 2px">
-    <button id="abaScalp" class="on">Sinais do scalp4</button>
+    <button id="abaGuia" class="on">Guia e melhor operacional</button>
+    <button id="abaScalp">Sinais do scalp4</button>
     <button id="abaToques">Retorno à média (toques)</button>
   </div>
 
-  <div id="viewScalp">
+    <div id="viewGuia" hidden>
+    <div class="card" id="gResumo"></div>
+
+    <div class="card">
+      <h2>1. O que significa cada coisa (com exemplo)</h2>
+      <div class="sub">Tudo aqui é medido no WINFUT, Renko 23R, de 09:00 às 14:00. Um exemplo real da semana aparece em cada item.</div>
+      <div class="grid2" id="gGlossario" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. Desenhos: como o trade funciona</h2>
+      <div class="grid2" id="gDesenhos" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card" id="gMelhor"></div>
+
+    <div class="card" id="gConfl"></div>
+
+    <div class="card" id="gTijolos"></div>
+
+    <div class="card">
+      <h2>6. Como ler as outras abas (passo a passo)</h2>
+      <div id="gComoLer"></div>
+    </div>
+  </div><!-- /viewGuia -->
+
+  <div id="viewScalp" hidden>
   <div class="card">
     <div class="row">
       <label>Stop (tijolos)<select id="selS"></select></label>
@@ -864,6 +891,281 @@ function init(){
   $q("abaScalp").onclick=()=>show(false); $q("abaToques").onclick=()=>show(true);
 }
 init();
+})();
+</script>
+<script>
+"use strict";
+// ================================================================= Guia e melhor operacional
+(function(){
+const $=id=>document.getElementById(id);
+const Z=115, RS=0.2;
+const TEXTG=new Set(["dia","hora","media","lado","hora_b","cluster","tipo"]);
+const NOME={E9:"MME 9 (23R)",E17:"MME 17 (23R)",E25:"MME 25 (23R)",E29:"MME 29 (23R)",E42:"MME 42 (23R)",E55:"MME 55 (23R)",
+  R20_20:"MME 20 do 20R",R20_72:"MME 72 do 20R (fúcsia/verde)",R42_27:"MME 27 do 42R (azul claro)",R42_55:"MME 55 do 42R (azul claro)",
+  R98_27:"MME 27 do 98R",R98_55:"MME 55 do 98R",VWAP_D:"VWAP diária",VWAP_S:"VWAP semanal"};
+const RAW="https://raw.githubusercontent.com/PedroMateus1991/analise2026/main/imagens/prints/";
+const strip=t=>(t||"").replace(/^\/\*.*?\*\//,"")||"{}";
+function parse(text){
+  const L=(text||"").replace(/^﻿/,"").trim().split(/\r?\n/); if(L.length<2) return [];
+  const h=L[0].split(";"), out=[];
+  for(let i=1;i<L.length;i++){const p=L[i].split(";"),o={};
+    for(let j=0;j<h.length;j++){const k=h[j],v=p[j]===undefined?"":p[j];o[k]=TEXTG.has(k)?v:(v===""?NaN:parseFloat(v.replace(",",".")));}
+    out.push(o);}
+  return out;
+}
+let all=[], MARC={};
+try{const d=JSON.parse(strip($("toquesEmbutidos").textContent)); for(const k of Object.keys(d)) all=all.concat(parse(d[k].csv));}catch(e){}
+try{MARC=JSON.parse(strip($("marcadosEmbutidos").textContent))||{};}catch(e){MARC={};}
+const ev=all.filter(r=>r.cl_ordem===1);
+if(!ev.length){$("abaGuia").style.display="none";$("viewGuia").hidden=true;$("viewScalp").hidden=false;$("abaScalp").classList.add("on");return;}
+
+const f0=x=>Math.round(x).toLocaleString("pt-BR");
+const sg=x=>(x>0?"+":"")+f0(x);
+const pc=x=>(x*100).toFixed(0)+"%";
+const f1=x=>x.toFixed(1).replace(".",",");
+const rs=pts=>"R$ "+(pts*RS).toFixed(0).replace(".",",");
+const dm=r=>r.dia.slice(8)+"/"+r.dia.slice(5,7);
+const RES=r=>r.a_S2_T5;
+function st(rows,key){
+  key=key||"a_S2_T5"; const xs=rows.map(r=>r[key]).filter(x=>x===x), n=xs.length; if(!n) return {n:0,wr:0,mu:0,lb:0,pos:0,nd:0};
+  const mu=xs.reduce((a,b)=>a+b,0)/n, sd=n>1?Math.sqrt(xs.reduce((a,b)=>a+(b-mu)*(b-mu),0)/(n-1)):0;
+  const dias={}; for(const r of rows) if(r[key]===r[key]) dias[r.dia]=(dias[r.dia]||0)+r[key];
+  const nd=Object.keys(dias).length, pos=Object.values(dias).filter(v=>v>0).length;
+  return {n,wr:xs.filter(x=>x>0).length/n,mu,lb:mu-sd/Math.sqrt(n),pos,nd};
+}
+const NS=[1,2,3,4,5,6,8,10];
+function reach(rows){
+  const n=rows.length; if(!n) return null;
+  const p={}; for(const N of NS) p[N]=rows.filter(r=>r["a_S2_T"+N]===N*Z).length/n;
+  const pts=[[0,1]].concat(NS.map(N=>[N,p[N]])); let av=0;
+  for(let i=1;i<pts.length;i++) av+=(pts[i][0]-pts[i-1][0])*(pts[i][1]+pts[i-1][1])/2;
+  return {p,av,semTijolo:1-p[1]};
+}
+const SLOW=new Set(["E42","E55","R20_72","R42_27","R42_55","R98_27","R98_55","VWAP_D","VWAP_S"]);
+const hh=r=>parseInt(r.hora.slice(0,2),10);
+const G={
+  lado:[["venda","toque vindo de baixo (você vende)",r=>r.lado==="V"],["compra","toque vindo de cima (você compra)",r=>r.lado==="C"]],
+  vel:[["média lenta","média lenta (MME 42/55 do 23R, MME 72 do 20R, MME 27/55 do 42R e do 98R, VWAP)",r=>SLOW.has(r.media)],["média rápida","média rápida (MME 9/17/25/29 do 23R, MME 20 do 20R)",r=>!SLOW.has(r.media)]],
+  hora:[["antes das 10h","antes das 10h",r=>hh(r)<10],["10h–11h","entre 10h e 11h",r=>hh(r)===10],["11h–12h","entre 11h e 12h",r=>hh(r)===11],["12h ou depois","a partir das 12h",r=>hh(r)>=12],["a partir das 10h","a partir das 10h",r=>hh(r)>=10]],
+  conf:[["2+ médias juntas","2 ou mais outras médias/VWAP a até 60 pts do nível tocado",r=>r.prox60>=2],["4+ médias juntas","4 ou mais outras médias/VWAP a até 60 pts do nível tocado",r=>r.prox60>=4]],
+  macd:[["MACD a favor","histograma do MACD a favor do trade (negativo na venda)",r=>r.hist_alin===1],["MACD contra","histograma do MACD contra o trade",r=>r.hist_alin===0]],
+  vwap:[["nível a favor da VWAP","nível tocado do lado favorável da VWAP diária (venda: abaixo dela)",r=>r.vwap_d_alin===1],["nível contra a VWAP","nível tocado do lado contrário da VWAP diária (venda: acima dela)",r=>r.vwap_d_alin===0]],
+  c42:[["42R a favor","preço a favor das médias 27 e 55 do 42R",r=>r.ctx42===1]],
+  c98:[["98R a favor","preço a favor das médias 27 e 55 do 98R",r=>r.ctx98===1]],
+  incl:[["média inclinada a favor","média inclinada a favor do trade",r=>r.incl_alin===1]],
+  s4:[["scalp4 recente","sinal do scalp4 do mesmo lado nos últimos 5 tijolos",r=>r.scalp4===1]]
+};
+const FEATS=[]; for(const g of Object.keys(G)) for(const [nome,desc,fn] of G[g]) FEATS.push({g,nome,desc,fn});
+const combos=[];
+(function(){
+  const k=FEATS.length;
+  function rec(start,cur,used){
+    if(cur.length){const rows=ev.filter(r=>cur.every(f=>f.fn(r))); if(rows.length>=10) combos.push({c:cur.slice(),rows,s:st(rows)});}
+    if(cur.length>=3) return;
+    for(let i=start;i<k;i++){const f=FEATS[i]; if(used.has(f.g)) continue; used.add(f.g); cur.push(f); rec(i+1,cur,used); cur.pop(); used.delete(f.g);}
+  }
+  rec(0,[],new Set());
+})();
+const vistos=new Set(), unicos=[];
+for(const c of combos.sort((a,b)=>b.s.lb-a.s.lb||a.c.length-b.c.length)){const id=c.rows.map(r=>r.dia+r.hora+r.media).join("|"); if(vistos.has(id)) continue; vistos.add(id); unicos.push(c);}
+const ok=(c,n)=>c.s.n>=n&&c.s.pos>=Math.min(3,c.s.nd)&&c.s.mu>0;
+const melhor=unicos.find(c=>ok(c,20));
+const melhorConf=unicos.find(c=>ok(c,10)&&c.c.some(f=>f.g==="conf"));
+const regra=c=>c.c.map(f=>f.nome).join(" + ");
+const base=st(ev), baseV=st(ev.filter(r=>r.lado==="V")), baseC=st(ev.filter(r=>r.lado==="C"));
+const slowV=ev.filter(r=>r.lado==="V"&&SLOW.has(r.media));
+
+function ex(rows,win){
+  const cand=rows.filter(r=>win?RES(r)>0:RES(r)<0);
+  return cand.find(r=>MARC[r.dia+" "+r.hora+" "+r.media])||cand[0];
+}
+const exW=ex(slowV,true)||ev.find(r=>RES(r)>0);
+const trad=r=>`${dm(r)} às ${r.hora}, ${NOME[r.media]}, nível ${f0(r.nivel)}`;
+const printHtml=r=>{const m=MARC[r.dia+" "+r.hora+" "+r.media]; if(!m) return "";
+  const u=RAW+"toques/"+m+".png"; return `<a href="${u}" target="_blank" rel="noopener"><img loading="lazy" src="${u}" alt="Print do Profit" style="max-width:100%;border-radius:8px;border:1px solid var(--line)" onerror="this.parentNode.style.display='none'"></a><div class="sub">Print do Profit com este trade marcado por um círculo numerado (posição aproximada pelo horário). Clique para ampliar.</div>`;};
+
+// ------------------------------------------------------------ resumo
+(function(){
+  const m=melhor, s=m&&m.s;
+  $("gResumo").innerHTML=`<h2>Resumo em 1 minuto</h2>
+  <div class="sub">${ev.length} movimentos independentes de retorno à média (só o 1º toque de cada movimento), stop 230 pts (2 tijolos) e gain 575 pts (5 tijolos). Ponto de equilíbrio: acertar 28,6% dos trades.</div>
+  <div class="kpis">
+    <div class="kpi"><div class="l">Entrar em qualquer toque</div><div class="v ${base.mu>0?"pos":"neg"}">${sg(base.mu)} pts</div><div class="s">${base.n} trades · acerto ${pc(base.wr)} · ${rs(base.mu)} por trade (1 contrato)</div></div>
+    <div class="kpi"><div class="l">Só venda (toque vindo de baixo)</div><div class="v ${baseV.mu>0?"pos":"neg"}">${sg(baseV.mu)} pts</div><div class="s">${baseV.n} trades · acerto ${pc(baseV.wr)}</div></div>
+    <div class="kpi"><div class="l">Só compra (toque vindo de cima)</div><div class="v ${baseC.mu>0?"pos":"neg"}">${sg(baseC.mu)} pts</div><div class="s">${baseC.n} trades · acerto ${pc(baseC.wr)}</div></div>
+    ${s?`<div class="kpi" style="border-color:var(--pos)"><div class="l">Melhor operacional encontrado</div><div class="v pos">${sg(s.mu)} pts</div><div class="s">${s.n} trades · acerto ${pc(s.wr)} · ${rs(s.mu)} por trade · dias positivos ${s.pos}/${s.nd}</div></div>`:""}
+  </div>
+  ${m?`<p style="margin:10px 0 0"><b>Operacional recomendado (hipótese):</b> ${regra(m)}. <span class="sub">A regra passo a passo, os exemplos e os prints estão na seção 3.</span></p>`:""}
+  <div class="note">Honestidade estatística: estes filtros foram escolhidos olhando a mesma semana (${combos.length} combinações testadas), então parte do “melhor” é sorte. Trate como hipótese e confirme em 2 ou 3 semanas novas antes de arriscar dinheiro. Este painel não é recomendação de investimento.</div>`;
+})();
+
+// ------------------------------------------------------------ glossario
+(function(){
+  const eV=exW, sv=st(slowV);
+  const A=[
+   ["Tijolo (Renko 23R)","Um tijolo = 23 ticks × 5 pts = <b>115 pontos</b>. O gráfico só ganha tijolo novo quando o preço anda 115 pts (e para virar de direção precisa andar 2 tijolos). Exemplo: preço em 166.335 → o próximo tijolo de alta só aparece em 166.450."],
+   ["Stop 230 / gain 575","Stop = 2 tijolos contra (230 pts), gain = 5 tijolos a favor (575 pts). No mini-índice (R$ 0,20 por ponto) são <b>−R$ 46</b> ou <b>+R$ 115</b> por contrato. Você precisa acertar <b>28,6%</b> dos trades só para empatar (230 ÷ (230+575))."],
+   ["Acerto",`% de trades que bateram o gain antes do stop. Exemplo: “venda em média lenta” teve ${slowV.length} trades e ${pc(sv.wr)} de acerto (${Math.round(sv.wr*slowV.length)} ganhos).`],
+   ["Exp. pts (expectativa)",`Média de pontos por trade (ganhos e perdas juntos). Se for positiva, no longo prazo o método rende. Exemplo: ${sg(sv.mu)} pts por trade = ${rs(sv.mu)} por contrato por trade.`],
+   ["n","Quantidade de trades no grupo. Com n pequeno (menos de 20) o resultado pode ser sorte: 8 trades com 50% de acerto não prova nada."],
+   ["dias+","Em quantos dias o grupo terminou positivo. Exemplo: “4/5” = ganhou em 4 de 5 dias. Quanto mais dias positivos, menos o resultado depende de um dia só."],
+   ["Toque","O preço vinha afastado de uma média (pelo menos 1 tijolo, com 2 tijolos fechados do mesmo lado) e volta a encostar nela. O nível é a média do último tijolo concluído. Venda = vinha de baixo; compra = vinha de cima."+(eV?` Exemplo: ${trad(eV)} (venda).`:"")],
+   ["Entrada no toque × virada de box","No toque: ordem limite exatamente no nível da média. Na virada de box: espera o primeiro tijolo a favor depois do toque e entra no fechamento dele (entra mais tarde, em preço pior, mas já com confirmação)."],
+   ["Movimento independente","Várias médias costumam ser tocadas pela mesma subida (em menos de 5 min). Isso é UM trade, não três. Por isso o painel usa só o 1º toque de cada movimento; contar todos infla o resultado."],
+   ["Confluência","Quantas outras médias/VWAPs estão a até 60 pts do nível tocado. Exemplo: “4+ juntas” = a média tocada está colada em pelo menos outras 4 linhas (zona mais forte de resistência/suporte)."],
+   ["Média lenta × rápida","Lentas: MME 42 e 55 do 23R, MME 72 do 20R, MME 27 e 55 do 42R e do 98R, VWAPs. Rápidas: MME 9, 17, 25, 29 do 23R e MME 20 do 20R."],
+   ["MACD / VWAP / 42R / inclinação a favor","MACD a favor: histograma negativo na venda (positivo na compra). VWAP a favor: nível tocado abaixo da VWAP diária na venda (acima na compra). 42R a favor: preço abaixo das médias 27 e 55 do 42R na venda. Inclinação a favor: a média desce na venda (sobe na compra)."],
+   ["“Abaixo de Y” / “Acima de Y”","Compara a média tocada (X) com outra média (Y) no momento do toque. Exemplo da tabela “Quem está por baixo de quem”: com X = MME 29 (23R) e Y = MME 72 do 20R, X abaixo de Y deu 11 trades e 63,6% de acerto; X acima de Y deu 24 trades e 33,3%. Na venda o esperado é X abaixo de Y (Y como teto)."],
+   ["Tijolos a favor","Quantos tijolos o preço anda a seu favor antes de o stop de 2 tijolos ser atingido. A seção 4 mostra a média e a % que chega a 1, 2, 3, 5 tijolos."]
+  ];
+  $("gGlossario").innerHTML=A.map(([t,d])=>`<div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px"><b>${t}</b><div class="sub" style="color:var(--ink);margin-top:3px">${d}</div></div>`).join("");
+})();
+
+// ------------------------------------------------------------ desenhos
+(function(){
+  const e=exW||ev[0], n=e.nivel, stp=n+2*Z, gn=n-5*Z, F=f0;
+  const lin=(x1,y1,x2,y2,c,w,d)=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="stroke:${c};stroke-width:${w||1.5}${d?";stroke-dasharray:"+d:""}"/>`;
+  const tx=(x,y,t,c,a,s)=>`<text x="${x}" y="${y}" text-anchor="${a||"start"}" style="fill:${c||"var(--mut)"};font-size:${s||11}px">${t}</text>`;
+  const bri=(x,y,up)=>`<rect x="${x}" y="${y}" width="16" height="22" rx="2" style="fill:${up?"#60a5fa":"#facc15"};opacity:.9"/>`;
+  const circ=(x,y,c,t)=>`<circle cx="${x}" cy="${y}" r="9" style="fill:none;stroke:${c};stroke-width:3"/>`+tx(x,y+4,t,c,"middle",11);
+  let s1=`<svg viewBox="0 0 380 250" width="100%" role="img" aria-label="Stop e gain em tijolos">`;
+  s1+=lin(20,60,300,60,"var(--neg)",2,"5 4")+tx(24,52,`STOP: +2 tijolos = ${F(stp)} (−230 pts = −R$ 46)`,"var(--neg)");
+  s1+=lin(20,104,300,104,"var(--ink)",2)+tx(24,96,`ENTRADA (venda no toque): ${F(n)}`,"var(--ink)");
+  s1+=`<rect x="300" y="104" width="22" height="110" style="fill:var(--posbg)"/><rect x="300" y="60" width="22" height="44" style="fill:var(--negbg)"/>`;
+  for(let i=1;i<=5;i++) s1+=lin(300,104+i*22,322,104+i*22,"var(--line)",1)+tx(330,104+i*22-6,i+"",null,"start",10);
+  s1+=tx(330,86,"1","var(--neg)","start",10)+tx(330,72,"2","var(--neg)","start",10);
+  s1+=lin(20,214,300,214,"var(--pos)",2,"5 4")+tx(24,208,`GAIN: −5 tijolos = ${F(gn)} (+575 pts = +R$ 115)`,"var(--pos)");
+  s1+=tx(20,238,"1 tijolo = 115 pts. Empata com 28,6% de acerto.","var(--mut)","start",10.5)+`</svg>`;
+  let s2=`<svg viewBox="0 0 380 250" width="100%" role="img" aria-label="Entrada no toque e na virada de box">`;
+  s2+=lin(20,70,360,70,"#34d399",3)+tx(300,62,"média (nível)","#34d399","start",10.5);
+  for(const [x,y] of [[40,170],[62,148],[84,126],[106,104]]) s2+=bri(x,y,true);
+  s2+=circ(124,72,"var(--pos)","1")+bri(140,92,false)+bri(158,114,false)+bri(176,136,false)+circ(148,92,"var(--warn)","2");
+  s2+=tx(20,28,"① Toque: o preço sobe e encosta na média →","var(--pos)","start",11)+tx(20,42,"    venda LIMITE no nível (entra no preço da média)","var(--pos)","start",10.5);
+  s2+=tx(20,200,"② Virada de box: 1º tijolo de baixa depois do toque →","var(--warn)","start",11)+tx(20,214,"    entra no fechamento dele (≈1 tijolo depois, já confirmado)","var(--warn)","start",10.5);
+  s2+=tx(20,238,`Exemplo real: toque em ${dm(e)} às ${e.hora} (${NOME[e.media]}).`,"var(--mut)","start",10.5)+`</svg>`;
+  let s3=`<svg viewBox="0 0 380 250" width="100%" role="img" aria-label="Varias medias, um movimento">`;
+  s3+=lin(20,70,360,70,"#34d399",2.5)+lin(20,80,360,80,"#22d3ee",2.5)+lin(20,92,360,92,"#f472b6",2.5);
+  s3+=tx(300,64,"MME 42","#34d399","start",10)+tx(300,76,"MME 55","#22d3ee","start",10)+tx(300,108,"MME 29","#f472b6","start",10);
+  for(const [x,y] of [[40,200],[62,178],[84,156],[106,134],[128,112]]) s3+=bri(x,y,true);
+  s3+=[["#f472b6",92,"3"],["#22d3ee",80,"2"],["#34d399",70,"1"]].map(([c,y,t],i)=>`<circle cx="${150+i*22}" cy="${y}" r="8" style="fill:none;stroke:${c};stroke-width:2.5"/>`+tx(150+i*22,y+4,t,c,"middle",10)).join("");
+  s3+=tx(20,28,"3 médias encostadas pela mesma subida = 3 toques,","var(--ink)","start",11)+tx(20,42,"mas é UM movimento → conta só 1 trade (o 1º toque).","var(--ink)","start",11);
+  s3+=tx(20,238,`Na semana: ${all.length} toques = ${new Set(all.map(r=>r.cluster)).size} movimentos independentes.`,"var(--mut)","start",10.5)+`</svg>`;
+  let s4=`<svg viewBox="0 0 380 250" width="100%" role="img" aria-label="Media tocada abaixo de outra">`;
+  s4+=lin(20,60,360,60,"#e879f9",3)+tx(270,52,"Y (outra média)","#e879f9","start",10.5);
+  s4+=lin(20,120,360,120,"#34d399",3)+tx(300,138,"X (tocada)","#34d399","start",10.5);
+  for(const [x,y] of [[40,200],[62,178],[84,156],[106,134]]) s4+=bri(x,y,true);
+  s4+=`<circle cx="130" cy="121" r="9" style="fill:none;stroke:var(--pos);stroke-width:3"/>`;
+  s4+=tx(20,28,"VENDA: o preço sobe, encosta em X, e X está ABAIXO","var(--ink)","start",11)+tx(20,42,"de Y (Y funciona como um teto acima).","var(--ink)","start",11);
+  s4+=tx(20,238,"Na compra vale o espelho: X acima de Y.","var(--mut)","start",10.5)+`</svg>`;
+  const c=(t,svg)=>`<div style="border:1px solid var(--line);border-radius:10px;padding:8px 10px"><b>${t}</b>${svg}</div>`;
+  const img=`<div style="grid-column:1/-1;border:1px solid var(--line);border-radius:10px;padding:8px 10px"><b>E no Profit de verdade (exemplo real)</b>${printHtml(e)||'<div class="sub">Na aba “Retorno à média”, clique em “gráfico” em qualquer trade para ver o print do Profit.</div>'}</div>`;
+  $("gDesenhos").innerHTML=c("A. Stop e gain em tijolos (exemplo real)",s1)+c("B. Toque × virada de box",s2)+c("C. Várias médias = um movimento",s3)+c("D. Média tocada abaixo/acima de outra",s4)+img;
+})();
+
+// ------------------------------------------------------------ melhor operacional
+function cardOp(titulo,c){
+  if(!c) return `<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px"><b>${titulo}</b><div class="sub">Nenhuma combinação atingiu os mínimos de trades e dias positivos.</div></div>`;
+  const s=c.s, r=reach(c.rows), w=ex(c.rows,true), l=ex(c.rows,false);
+  const passos=c.c.map(f=>`<li>Condição: ${f.desc}.</li>`).join("");
+  const compra=c.c.some(f=>f.nome==="compra");
+  return `<div style="border:1px solid var(--pos);border-radius:10px;padding:10px 12px">
+   <h3 style="font-size:14px;margin:0 0 4px">${titulo}: <span class="pos">${regra(c)}</span></h3>
+   <div class="kpis" style="margin-top:6px">
+     <div class="kpi"><div class="l">Trades</div><div class="v">${s.n}</div><div class="s">dias positivos ${s.pos}/${s.nd}</div></div>
+     <div class="kpi"><div class="l">Acerto</div><div class="v">${pc(s.wr)}</div><div class="s">equilíbrio 28,6%</div></div>
+     <div class="kpi"><div class="l">Expectativa</div><div class="v ${s.mu>0?"pos":"neg"}">${sg(s.mu)} pts</div><div class="s">${rs(s.mu)} por trade · piso conservador ${sg(s.lb)}</div></div>
+     <div class="kpi"><div class="l">Tijolos a favor (média)</div><div class="v">${f1(r.av)}</div><div class="s">antes do stop de 2 tijolos · ${pc(r.p[2])} passam de 2 tijolos</div></div>
+   </div>
+   <p style="margin:8px 0 2px"><b>Como executar, passo a passo</b></p>
+   <ol style="margin:0 0 0 18px;padding:0">
+     <li>Espere a 1ª média do movimento ser tocada (as outras encostadas na mesma subida não contam).</li>
+     ${passos}
+     <li>${compra?"Compre":"Venda"} com ordem <b>limite no nível da média</b>.</li>
+     <li>Stop de 2 tijolos (230 pts) contra e gain de 5 tijolos (575 pts) a favor.</li>
+   </ol>
+   ${w?`<p style="margin:8px 0 2px"><b>Exemplo que ganhou:</b> ${trad(w)} → alvo de 575 pts (+R$ 115).</p>${printHtml(w)}`:""}
+   ${l?`<p style="margin:8px 0 2px"><b>Exemplo que perdeu:</b> ${trad(l)} → stop de 230 pts (−R$ 46).</p>${printHtml(l)}`:""}
+  </div>`;
+}
+(function(){
+  const top=unicos.filter(c=>ok(c,10)).slice(0,8);
+  const tab=`<div class="scroll"><table><tr><th>Regra (filtros combinados)</th><th>n</th><th>acerto</th><th>exp. pts</th><th>piso conserv.</th><th>dias+</th><th>tijolos a favor</th></tr>`+
+    top.map(c=>{const r=reach(c.rows);return `<tr><td style="white-space:normal">${regra(c)}</td><td>${c.s.n}</td><td>${pc(c.s.wr)}</td><td class="${c.s.mu>0?"pos":"neg"}">${sg(c.s.mu)}</td><td>${sg(c.s.lb)}</td><td>${c.s.pos}/${c.s.nd}</td><td>${f1(r.av)}</td></tr>`;}).join("")+`</table></div>`;
+  const bins=[[0,0,"nenhuma outra junta"],[1,1,"1 junta"],[2,3,"2 a 3 juntas"],[4,99,"4 ou mais juntas"]];
+  const cell=s=>s.n?`<td>${s.n}</td><td>${pc(s.wr)}</td><td class="${s.mu>0?"pos":"neg"}">${sg(s.mu)}</td>`:`<td>0</td><td>–</td><td>–</td>`;
+  const tb=`<div class="scroll"><table><tr><th>Médias coladas (≤ 60 pts)</th><th>Venda n</th><th>acerto</th><th>exp.</th><th>Compra n</th><th>acerto</th><th>exp.</th></tr>`+bins.map(([a,b,nm])=>
+    `<tr><td>${nm}</td>${cell(st(ev.filter(r=>r.lado==="V"&&r.prox60>=a&&r.prox60<=b)))}${cell(st(ev.filter(r=>r.lado==="C"&&r.prox60>=a&&r.prox60<=b)))}</tr>`).join("")+`</table></div>`;
+  $("gMelhor").innerHTML=`<h2>3. Melhor operacional e melhor confluência</h2>
+   <div class="sub">Como foi escolhido: o painel testou ${combos.length} combinações de até 3 filtros (lado, tipo de média, horário, médias coladas, MACD, VWAP, 42R, 98R, inclinação, scalp4) nos movimentos independentes e ordenou pela expectativa <b>conservadora</b> (média menos 1 erro-padrão), que pune amostra pequena. O operacional exige ≥ 20 trades e positivo em pelo menos 3 dias; a confluência exige ≥ 10 trades.</div>
+   <div class="grid2" style="margin-top:10px">${cardOp("Operacional recomendado",melhor)}${cardOp("Melhor confluência",melhorConf)}</div>
+   <h3 style="font-size:14px;margin:14px 0 2px">Quanto vale cada nível de confluência</h3>
+   <div class="sub">Exemplo de leitura: na linha “4 ou mais juntas”, veja quantas vendas (n) tiveram pelo menos 4 outras linhas coladas no nível e qual foi o acerto.</div>${tb}
+   <h3 style="font-size:14px;margin:14px 0 2px">Ranking das melhores combinações</h3>
+   <div class="sub">“Piso conserv.” = expectativa menos 1 erro-padrão. Quanto mais combinações testadas, maior a chance de a melhor ser só sorte.</div>${tab}`;
+})();
+
+// ------------------------------------------------------------ melhores confluencias: payoff e acerto
+(function(){
+  const cand=unicos.filter(c=>c.s.n>=12&&c.s.pos>=Math.min(3,c.s.nd));
+  function melhorPayoff(c){let b=null; for(const S of [1,2,3,4]) for(const T of NS){const s=st(c.rows,"a_S"+S+"_T"+T); if(!b||s.lb>b.s.lb) b={S,T,s};} return b;}
+  const A=cand.map(c=>({c,b:melhorPayoff(c)})).filter(x=>x.b.s.mu>0).sort((a,b)=>b.b.s.lb-a.b.s.lb).slice(0,6);
+  const B=cand.filter(c=>c.s.mu>0).sort((a,b)=>b.s.wr-a.s.wr||b.s.mu-a.s.mu).slice(0,6);
+  const tA=`<div class="scroll"><table><tr><th>Confluência (regra)</th><th>melhor stop × gain</th><th>n</th><th>acerto</th><th>exp. pts</th><th>R$/trade</th><th>dias+</th></tr>`+A.map(({c,b})=>`<tr><td style="white-space:normal">${regra(c)}</td><td>${b.S} × ${b.T} tijolos (${b.S*Z} / ${b.T*Z} pts)</td><td>${b.s.n}</td><td>${pc(b.s.wr)}</td><td class="pos">${sg(b.s.mu)}</td><td>${rs(b.s.mu)}</td><td>${b.s.pos}/${b.s.nd}</td></tr>`).join("")+`</table></div>`;
+  const tB=`<div class="scroll"><table><tr><th>Confluência (regra)</th><th>n</th><th>acerto (stop 2 × gain 5)</th><th>exp. pts</th><th>acerto com gain 2</th><th>dias+</th></tr>`+B.map(c=>`<tr><td style="white-space:normal">${regra(c)}</td><td>${c.s.n}</td><td><b>${pc(c.s.wr)}</b></td><td class="pos">${sg(c.s.mu)}</td><td>${pc(st(c.rows,"a_S2_T2").wr)}</td><td>${c.s.pos}/${c.s.nd}</td></tr>`).join("")+`</table></div>`;
+  $("gConfl").innerHTML=`<h2>3b. Melhores confluências: payoff e acertividade</h2>
+   <div class="sub">Duas listas das combinações com ≥ 12 trades e ao menos 3 dias positivos. <b>Melhor payoff</b>: para cada combinação o painel testa todos os stops (1 a 4 tijolos) e gains (1 a 10) e mostra o par com a melhor expectativa conservadora. <b>Melhor acertividade</b>: maior % de acerto mantendo expectativa positiva. Exemplo de leitura: “2 × 5 tijolos” = stop de 230 e gain de 575 pts; “acerto com gain 2” é a % que chegaria a 230 pts a favor antes do stop de 230.</div>
+   <h3 style="font-size:14px;margin:10px 0 2px">Melhor payoff (stop × gain)</h3>${tA}
+   <h3 style="font-size:14px;margin:12px 0 2px">Melhor acertividade</h3>${tB}
+   <div class="note">Atenção: acerto alto com poucos trades é o jeito mais fácil de se enganar. Dê preferência a regras que apareçam nas duas listas e que se repitam nas próximas semanas.</div>`;
+})();
+
+// ------------------------------------------------------------ tijolos a favor
+(function(){
+  const grupos=[["Todos os toques",ev],["Só venda",ev.filter(r=>r.lado==="V")],["Só compra",ev.filter(r=>r.lado==="C")],["Venda em média lenta",slowV]];
+  if(melhor) grupos.push(["Operacional recomendado",melhor.rows]);
+  if(melhorConf) grupos.push(["Melhor confluência",melhorConf.rows]);
+  const th=NS.map(N=>`<th>≥ ${N}</th>`).join("");
+  const rows=grupos.map(([nm,rw])=>{const r=reach(rw); if(!r) return ""; return `<tr><td>${nm}</td><td>${rw.length}</td>`+NS.map(N=>`<td style="background:rgba(76,195,138,${(r.p[N]*0.55).toFixed(2)})">${pc(r.p[N])}</td>`).join("")+`<td><b>${f1(r.av)}</b></td><td>${pc(r.semTijolo)}</td></tr>`;}).join("");
+  const rv=reach(slowV);
+  let gainTab="";
+  if(melhor){
+    const lin=NS.map(N=>{const s=st(melhor.rows,"a_S2_T"+N);return `<td class="${s.mu>0?"pos":"neg"}">${sg(s.mu)}</td>`;}).join("");
+    const wr=NS.map(N=>`<td>${pc(st(melhor.rows,"a_S2_T"+N).wr)}</td>`).join("");
+    gainTab=`<h3 style="font-size:14px;margin:14px 0 2px">Qual gain compensa no operacional recomendado? (stop fixo de 2 tijolos)</h3><div class="sub">Cada coluna é um gain em tijolos. Exemplo: “5” é o gain de 575 pts. Gains maiores acertam menos mas pagam mais; confirme em semanas novas antes de mudar o seu.</div><div class="scroll"><table><tr><th>Gain (tijolos)</th>${NS.map(N=>`<th>${N}</th>`).join("")}</tr><tr><td>acerto</td>${wr}</tr><tr><td>exp. pts</td>${lin}</tr></table></div>`;
+  }
+  $("gTijolos").innerHTML=`<h2>4. Quantos tijolos o preço anda a favor?</h2>
+   <div class="sub">Cada coluna “≥ N” é a % de trades em que o preço chegou a N tijolos a favor (N × 115 pts) <b>antes</b> de o stop de 2 tijolos ser atingido. “Média” é o número médio de tijolos a favor antes do stop (máximo 10). “Stop antes de 1 tijolo” é a % que não andou nem 1 tijolo a favor.</div>
+   ${rv?`<div class="sub" style="color:var(--ink);margin-top:4px">Exemplo: nas ${slowV.length} vendas em média lenta, ${pc(rv.p[2])} andaram ao menos 2 tijolos (230 pts) a favor, ${pc(rv.p[5])} chegaram a 5 tijolos (575 pts, o gain) e a média foi de ${f1(rv.av)} tijolos a favor.</div>`:""}
+   <div class="scroll"><table><tr><th>Grupo</th><th>n</th>${th}<th>média</th><th>stop antes de 1 tijolo</th></tr>${rows}</table></div>${gainTab}`;
+})();
+
+// ------------------------------------------------------------ como ler
+(function(){
+  let exRel="";
+  const X="E29", rowsX=ev.filter(r=>r.media===X); let best=null;
+  for(const y of Object.keys(NOME)){ if(y===X) continue; const b=st(rowsX.filter(r=>r["rel_"+y]===-1)), a=st(rowsX.filter(r=>r["rel_"+y]===1)); if(b.n>=8&&a.n>=8){const d=Math.abs(b.wr-a.wr); if(!best||d>best.d) best={y,b,a,d};}}
+  if(best) exRel=`Exemplo real: com a ${NOME[X]} tocada e a ${NOME[best.y]} como referência, “abaixo de Y” teve ${best.b.n} trades e ${pc(best.b.wr)} de acerto, enquanto “acima de Y” teve ${best.a.n} trades e ${pc(best.a.wr)}.`;
+  const bl={}; for(const r of ev){const k=r.hora.slice(0,2)+(parseInt(r.hora.slice(3,5),10)<30?":00":":30"); (bl[k]=bl[k]||[]).push(r);}
+  let h=null; for(const k of Object.keys(bl).sort()){const s=st(bl[k]); if(s.n>=10&&(!h||s.mu>h.s.mu)) h={k,s};}
+  let rk=null; for(const m of Object.keys(NOME)){const s=st(ev.filter(r=>r.media===m)); if(s.n>=8&&(!rk||s.wr>rk.s.wr)) rk={m,s};}
+  const D=(t,body)=>`<details style="margin-bottom:6px"><summary>${t}</summary><div style="padding:4px 0 6px 12px;font-size:13px">${body}</div></details>`;
+  $("gComoLer").innerHTML=
+   D("Aba “Retorno à média” → filtros do topo","<b>Entrada</b>: toque (ordem limite no nível) ou virada de box (1º tijolo a favor). <b>Média / Lado / Horário</b> filtram os trades. <b>Stop e Gain (tijolos)</b> mudam o payoff: 2 e 5 = 230 e 575 pts. As caixas marcadas (MACD, VWAP, 42R, inclinação, 2+ médias) mantêm só os trades com aquela confluência. “Só o 1º toque” deve ficar sempre marcado, senão a mesma subida é contada várias vezes. O quadro de veredito logo abaixo diz, em palavras, se vale a pena.")+
+   D("Ranking: qual média segura mais o preço?",`Cada linha é uma média. “Acerto A” é o % de trades entrando no toque que bateram o gain; “exp.” é a média de pontos por trade; “B” é o mesmo entrando na virada de box. ${rk?`Exemplo real: a melhor em acerto foi a ${NOME[rk.m]}, com ${rk.s.n} trades e ${pc(rk.s.wr)} (cuidado: n pequeno).`:""} “Rejeição” mede, nos pavios que passam pela média, quantas vezes o próximo tijolo não fechou além dela.`)+
+   D("Horário (blocos de 30 min)",`Mostra o resultado por faixa de horário. ${h?`Exemplo real: o melhor bloco com 10+ trades foi ${h.k}, com ${sg(h.s.mu)} pts por trade (${h.s.n} trades).`:""} O melhor e o pior horário mudam de semana para semana; use para evitar, não para fixar.`)+
+   D("Quem está por baixo de quem",`Escolha a média no filtro do topo (X). Cada linha compara X com outra média Y: colunas “ABAIXO de Y” (X estava abaixo de Y) e “ACIMA de Y”, com n, acerto e expectativa. Na venda, o esperado é X abaixo de Y; na compra, X acima. ${exRel}`)+
+   D("Alinhamentos e confluências",`Cada tabela divide os trades em “com” e “sem” um alinhamento (MACD, VWAP, 42R, inclinação…). Se as duas linhas são parecidas, o alinhamento não ajuda. Exemplo real: “MACD a favor” teve ${sg(st(ev.filter(r=>r.hist_alin===1)).mu)} pts por trade e “MACD contra” ${sg(st(ev.filter(r=>r.hist_alin===0)).mu)}.`)+
+   D("Trades e gráfico de cada trade","A tabela lista cada trade (data, hora, média, resultado). Clique em “gráfico”: aparece um gráfico reconstruído (tijolos de 115 pts, as médias, o ponto de entrada, o stop e o gain) e, abaixo, o print do Profit. Nos 28 trades de venda em média lenta o print tem um círculo numerado; nos demais é uma captura da janela de tempo (procure pelo horário).")+
+   D("Aba “Sinais do scalp4”","Mostra o indicador ___scalp4_Pedro_2026_: <b>veredito</b> (vale a pena entrar nos sinais?), <b>curva de resultado</b> (pontos acumulados trade a trade; subir é bom), <b>mapa stop × gain</b> (cada célula é um payoff; a borda tracejada é o melhor), <b>situação</b> (resultado por horário, sequência, nº de médias cruzadas), <b>quanto anda a favor/contra</b>, e os filtros A a I do operacional proposto. Lembre: A a I foram montados olhando a mesma semana, são hipóteses.")+
+   D("Como atualizar para uma nova semana","Exporte os dados no Profit, reduza, gere a semana e o dashboard (passo a passo no README do repositório). O painel soma todas as semanas para recalcular o melhor operacional. Só confie em um filtro se ele se repetir em semanas novas.");
+})();
+
+// ------------------------------------------------------------ abas
+const abas={abaGuia:"viewGuia",abaScalp:"viewScalp",abaToques:"viewToques"};
+$("abaGuia").addEventListener("click",()=>{for(const [b,v] of Object.entries(abas)){const on=b==="abaGuia"; $(v).hidden=!on; $(b).classList.toggle("on",on);}});
+$("abaScalp").addEventListener("click",()=>{$("viewGuia").hidden=true;$("abaGuia").classList.remove("on");});
+$("abaToques").addEventListener("click",()=>{$("viewGuia").hidden=true;$("abaGuia").classList.remove("on");});
+$("abaGuia").click();
 })();
 </script>
 </body>

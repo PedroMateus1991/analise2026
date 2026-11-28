@@ -40,6 +40,10 @@ Só o 1º e o 2º sinal do episódio, fechamento atravessando 2 ou 3 médias, de
 - Cada trade tem um gráfico reconstruído e o link da captura do Profit que cobre o horário.
 - `python -I scripts/toques.py --dias <d1,d2,...>` gera `semanas/toques_*.csv`, `rejeicao_*.csv` e `toques_graficos_*.json` (precisa de `dados/WINZ26_F_0_1min_*.csv` para a VWAP).
 
+## Guia e melhor operacional (aba inicial do dashboard)
+
+Glossário com exemplos reais, desenhos explicativos, o melhor operacional e a melhor confluência (busca de até 3 filtros, ordenada pela expectativa conservadora), melhores confluências por payoff e por acerto, e quantos tijolos o preço anda a favor. Tudo é recalculado no navegador a partir dos CSVs de toques, então se atualiza sozinho a cada semana nova.
+
 ## Limitações
 
 - O histograma do MACD calculado difere cerca de 47 pts do Profit.
