@@ -55,6 +55,8 @@ def main():
     ap.add_argument("--ini", default="09:00:00")
     ap.add_argument("--fim", default="14:00:00")
     ap.add_argument("--ativo", default="WINZ26")
+    ap.add_argument("--hist_offset", type=float, default=0.0,
+                    help="desloca o histograma do MACD (pts) para calibrar contra o Profit")
     args = ap.parse_args()
 
     size = args.ticks * PONTOS_POR_TICK
@@ -99,7 +101,7 @@ def main():
         sg = m if sg is None else sg + a(42) * (m - sg)
         b["e"] = dict(e)
         b["macd"] = m
-        b["hist"] = m - sg
+        b["hist"] = m - sg + args.hist_offset
 
     # sinais (logica literal do ___scalp4_Pedro_2026_: `abertura` = abertura do tijolo, validada
     # contra as setas do Profit na segunda 23/11: candles 24, 28 e 29)
