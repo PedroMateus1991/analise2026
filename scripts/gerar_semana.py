@@ -20,6 +20,7 @@ import numpy as np
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
+import htf  # noqa: E402
 import renko  # noqa: E402
 
 PONTOS_POR_TICK = 5  # WIN: 1 tick = 5 pontos
@@ -43,6 +44,35 @@ def hms(s):
 
 def num(x, nd=1):
     return str(round(float(x), nd)).replace(".", ",")
+
+
+# Contexto de Renkos maiores: medias exponenciais 27 e 55 do 42R (15 min) e do 98R (60 min).
+CTX_TICKS = (42, 98)
+CTX_TOL = {42: 250, 98: 300}  # faixa (pts) em que a posicao do preco e incerta (erro de calibracao)
+CTX_COLS = []
+for _n in CTX_TICKS:
+    CTX_COLS += [f"h{_n}_27", f"h{_n}_55", f"dist{_n}_27", f"dist{_n}_55", f"pos{_n}", f"tend{_n}",
+                 f"incl{_n}", f"alin_pos{_n}", f"alin_tend{_n}", f"alin_incl{_n}", f"incerto{_n}"]
+
+
+def contexto(ser, n, lado, dia, t, preco):
+    """Colunas de contexto para um tijolo: posicao do preco em relacao as medias 27/55 do Renko maior.
+    pos: +1 acima das duas, 0 entre, -1 abaixo das duas. alin_*: +1 a favor do lado do sinal
+    (venda = abaixo/queda; compra = acima/alta), -1 contra, 0 entre as medias."""
+    est = ser.estado(dia, t, preco)
+    if est is None:
+        return [""] * 11
+    m27, m55, ant27, _ = est
+    pos = 1 if preco > max(m27, m55) else (-1 if preco < min(m27, m55) else 0)
+    tend = 1 if m27 > m55 else -1
+    incl = 1 if m27 > ant27 else -1
+    sg = -1 if lado == "V" else 1  # sentido favoravel: venda = -1, compra = +1
+    alin_pos = pos * sg
+    alin_tend = tend * sg
+    alin_incl = incl * sg
+    incerto = 1 if min(abs(preco - m27), abs(preco - m55)) < CTX_TOL[n] else 0
+    return [num(m27), num(m55), num(preco - m27), num(preco - m55), pos, tend, incl,
+            alin_pos, alin_tend, alin_incl, incerto]
 
 
 def main():
@@ -163,6 +193,11 @@ def main():
         r["min_padrao"] = float((seg_t[k] - b["t"]) / 60.0) if k < big else None
         return r
 
+    # series de contexto (42R e 98R): usam todos os dias de preco disponiveis antes da semana como historico
+    hist_dias = sorted(nm[7:17] for nm in os.listdir(args.dados)
+                       if nm.startswith("precos_") and nm.endswith(".csv") and nm[7:17] < dias[0])
+    series = {n: htf.Serie(hist_dias + dias, n, dados=args.dados) for n in CTX_TICKS}
+
     saida = args.saida or os.path.join(AQUI, "..", "semanas", f"semana_{dias[0]}_{args.ticks}R.csv")
     os.makedirs(os.path.dirname(saida), exist_ok=True)
     cols = ["semana", "ativo", "renko_ticks", "tijolo_pts", "dia", "hora", "idx_dia", "lado", "sinal", "seq",
@@ -170,6 +205,7 @@ def main():
             "dist_e55", "spread_25_29", "mfe_10m", "mae_10m", "mfe_30m", "mae_30m", "mfe_60m", "mae_60m",
             "mfe_fim", "mae_fim", "t_mfe_min", "min_padrao"]
     cols += [f"r_S{S}_T{T}" for S in STOPS for T in ALVOS]
+    cols += CTX_COLS
 
     n_lin = n_sig = 0
     with open(saida, "w", encoding="utf-8", newline="") as f:
@@ -193,6 +229,8 @@ def main():
                                        "mfe_fim", "mae_fim", "t_mfe_min")]
             row += [num(d["min_padrao"]) if d["min_padrao"] is not None else ""]
             row += [num(d[f"r_S{S}_T{T}"], 0) for S in STOPS for T in ALVOS]
+            for n_ctx in CTX_TICKS:
+                row += contexto(series[n_ctx], n_ctx, lado, b["dia"], b["t"], b["c"])
             f.write(";".join(str(x) for x in row) + "\n")
             n_lin += 1
             n_sig += 1 if b["sig"] else 0

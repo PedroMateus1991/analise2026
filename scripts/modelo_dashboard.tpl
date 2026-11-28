@@ -101,6 +101,9 @@ details p,details li{color:var(--mut)}
           <option value="D">D · C + depois das 10h (operacional proposto)</option>
           <option value="E">E · C + |MACD| entre 150 e 300</option>
           <option value="F">F · só |MACD| entre 150 e 300</option>
+          <option value="G">G · D + 42R a favor (preço abaixo das 2 médias na venda, acima na compra)</option>
+          <option value="H">H · só 42R a favor</option>
+          <option value="I">I · 42R a favor ou entre as médias (sem ir contra)</option>
         </select>
       </label>
       <label>Lado
@@ -128,8 +131,10 @@ details p,details li{color:var(--mut)}
       <li><b>O fechamento do tijolo atravessa 2 ou 3 médias</b> das 5 (17, 25, 29, 42, 55). Atravessar só 1 ou 4–5 perdeu.</li>
       <li><b>Somente depois das 10:00</b> (a primeira hora teve 14% de acerto).</li>
       <li>Stop de 2 tijolos (230 pts) e gain de 5 tijolos (575 pts), como você opera.</li>
+      <li><b>Contexto do 42R (15 min, médias azuis 27 e 55) — versão G:</b> preferir quando o preço está do lado a favor das duas médias (abaixo na venda, acima na compra). Entre as duas médias foi o pior caso da semana. Poucos trades: confirme em semanas novas.</li>
     </ul>
     <div class="row"><button id="btnOper" class="on">Aplicar operacional D (stop 2 / gain 5)</button>
+      <button id="btnOperG" class="on">Aplicar D + 42R a favor (G)</button>
       <span class="sub" id="operResumo"></span></div>
     <div style="margin-top:10px"><img id="imgComo" alt="Print do Profit anotado mostrando como cada sinal é analisado" style="max-width:100%;border-radius:8px;border:1px solid var(--line)" src="https://raw.githubusercontent.com/PedroMateus1991/analise2026/main/imagens/como_analiso_2026-11-23.png" onerror="this.style.display='none'"></div>
   </div>
@@ -188,6 +193,14 @@ details p,details li{color:var(--mut)}
   </div>
 
   <div class="card">
+    <details>
+      <summary>Capturas do Profit anotadas (23 a 27/11) — setas vistas × sinais calculados</summary>
+      <p class="sub">Cada imagem é uma janela do gráfico 23R no seu Profit, com as setas encontradas circuladas e a lista dos sinais calculados no mesmo trecho. Parte das setas pode ficar abaixo da área visível do gráfico, então a contagem do print costuma ser menor ou igual à calculada. Carregam do GitHub (precisa de internet).</p>
+      <div id="galeria" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px"></div>
+    </details>
+  </div>
+
+  <div class="card">
     <h2>Carregar outra semana</h2>
     <div class="drop" id="drop">Arraste aqui um ou mais arquivos <b>semana_*.csv</b> ou <label style="display:inline;color:var(--acc);cursor:pointer">escolha no computador<input type="file" id="inFile" accept=".csv" multiple hidden></label></div>
   </div>
@@ -221,6 +234,7 @@ const fmt1=n=>isFinite(n)?n.toLocaleString("pt-BR",{minimumFractionDigits:1,maxi
 const fmtR=n=>isFinite(n)?n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"}):"—";
 const pct=n=>isFinite(n)?(n*100).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})+"%":"—";
 const sgn=n=>n>0?"pos":(n<0?"neg":"");
+const ctxTxt=v=>!isFinite(v)?"—":(v===1?"a favor":(v===0?"entre":"contra"));
 const $=id=>document.getElementById(id);
 const DOW=["dom","seg","ter","qua","qui","sex","sáb"];
 
@@ -248,6 +262,10 @@ const FILTROS={
   D:r=>r.seq<=2&&r.n_emas>=2&&r.n_emas<=3&&parseInt(r.hora.slice(0,2),10)>=10,
   E:r=>r.seq<=2&&r.n_emas>=2&&r.n_emas<=3&&Math.abs(r.hist)>=150&&Math.abs(r.hist)<300,
   F:r=>Math.abs(r.hist)>=150&&Math.abs(r.hist)<300,
+  // contexto do Renko de 15 min (42R, medias azuis): +1 = preço do lado a favor das duas medias 27 e 55
+  G:r=>r.seq<=2&&r.n_emas>=2&&r.n_emas<=3&&parseInt(r.hora.slice(0,2),10)>=10&&r.alin_pos42===1,
+  H:r=>r.alin_pos42===1,
+  I:r=>r.alin_pos42>=0,
 };
 const S0={weeks:{}, semana:null, lado:"VC", dias:null, hora:"9-14", filtro:"nenhum", S:2, T:5, rs:0.2, ctr:1, custo:0, conj:"sinais", busca:"", sort:{k:"dia",d:1}};
 const st=S0;
@@ -437,6 +455,19 @@ function renderBreak(sig,S,T){
     tabGrupo("Distância do fechamento à média 55",groupBy(sig,db,["< 300","300–600","600–1000","≥ 1000"]),S,T),
     tabGrupo("Lado",groupBy(sig,r=>r.lado==="V"?"Venda ▼":"Compra ▲",["Venda ▼","Compra ▲"]),S,T),
   ];
+  // contexto de Renko maior (so aparece se o CSV da semana tiver as colunas)
+  if(sig.length && isFinite(sig[0].alin_pos42)){
+    const rot=v=>!isFinite(v)?null:(v===1?"a favor":(v===0?"entre as médias":"contra"));
+    const ord=["a favor","entre as médias","contra"];
+    const ordLado=["Venda · a favor","Venda · entre as médias","Venda · contra","Compra · a favor","Compra · entre as médias","Compra · contra"];
+    for(const [n,nome] of [[42,"42R (15 min, azuis)"],[98,"98R (60 min)"]]){
+      out.push(tabGrupo(`${nome}: preço × médias 27 e 55`,groupBy(sig,r=>rot(r["alin_pos"+n]),ord),S,T));
+      out.push(tabGrupo(`${nome}: lado × posição do preço`,groupBy(sig,r=>{const x=rot(r["alin_pos"+n]);return x?((r.lado==="V"?"Venda":"Compra")+" · "+x):null;},ordLado),S,T));
+      out.push(tabGrupo(`${nome}: inclinação da média 27`,groupBy(sig,r=>isFinite(r["alin_incl"+n])?(r["alin_incl"+n]===1?"a favor":"contra"):null,["a favor","contra"]),S,T));
+      out.push(tabGrupo(`${nome}: tendência (27 × 55)`,groupBy(sig,r=>isFinite(r["alin_tend"+n])?(r["alin_tend"+n]===1?"a favor":"contra"):null,["a favor","contra"]),S,T));
+    }
+    out.push(tabGrupo("Qualidade da medida (42R): preço perto de uma média?",groupBy(sig,r=>isFinite(r.incerto42)?(r.incerto42===1?"a menos de 250 pts (incerto)":"longe das médias"):null,["longe das médias","a menos de 250 pts (incerto)"]),S,T));
+  }
   $("breakdowns").innerHTML=out.join("");
 }
 
@@ -454,7 +485,7 @@ function renderExc(sig,base){
   $("tabPerc").innerHTML=p+`<tr><td colspan="4" style="text-align:left;color:var(--mut);font-size:12px">Um stop menor que o percentil de 75% será atingido em mais de 25% dos trades.</td></tr>`;
 }
 
-const COLS=[["dia","Dia"],["hora","Hora"],["lado","Lado"],["seq","Seq"],["entrada","Entrada"],["hist","Hist MACD"],["n_emas","Médias"],["run","Run"],["res","Resultado"],["pts","Pts"],["mfe_30m","Fav 30m"],["mae_30m","Contra 30m"],["mfe_fim","Fav 14h"],["mae_fim","Contra 14h"]];
+const COLS=[["dia","Dia"],["hora","Hora"],["lado","Lado"],["seq","Seq"],["entrada","Entrada"],["hist","Hist MACD"],["n_emas","Médias"],["run","Run"],["alin_pos42","42R"],["alin_pos98","98R"],["res","Resultado"],["pts","Pts"],["mfe_30m","Fav 30m"],["mae_30m","Contra 30m"],["mfe_fim","Fav 14h"],["mae_fim","Contra 14h"]];
 function renderTabela(sig,S,T){
   let rows=sig.map(r=>Object.assign({},r,{res:tag(r,S,T),pts:res(r,S,T)}));
   const q=st.busca.trim().toLowerCase();
@@ -462,7 +493,7 @@ function renderTabela(sig,S,T){
   const {k,d}=st.sort;
   rows.sort((x,y)=>{const a=x[k],b=y[k];return (typeof a==="string"?a.localeCompare(b):(a-b))*d;});
   const head=COLS.map(([c,n])=>`<th class="s" data-k="${c}">${n}${st.sort.k===c?(st.sort.d>0?" ▲":" ▼"):""}</th>`).join("");
-  const body=rows.map(r=>`<tr><td>${r.dia.slice(5)}</td><td>${r.hora}</td><td>${r.lado==="V"?"▼":"▲"}</td><td>${r.seq}</td><td>${fmt0(r.entrada)}</td><td>${fmt0(r.hist)}</td><td>${r.n_emas}</td><td>${r.run}</td><td class="tag-${r.res}">${r.res}</td><td class="${sgn(r.pts)}">${fmt0(r.pts)}</td><td>${fmt0(r.mfe_30m)}</td><td>${fmt0(r.mae_30m)}</td><td>${fmt0(r.mfe_fim)}</td><td>${fmt0(r.mae_fim)}</td></tr>`).join("");
+  const body=rows.map(r=>`<tr><td>${r.dia.slice(5)}</td><td>${r.hora}</td><td>${r.lado==="V"?"▼":"▲"}</td><td>${r.seq}</td><td>${fmt0(r.entrada)}</td><td>${fmt0(r.hist)}</td><td>${r.n_emas}</td><td>${r.run}</td><td>${ctxTxt(r.alin_pos42)}</td><td>${ctxTxt(r.alin_pos98)}</td><td class="tag-${r.res}">${r.res}</td><td class="${sgn(r.pts)}">${fmt0(r.pts)}</td><td>${fmt0(r.mfe_30m)}</td><td>${fmt0(r.mae_30m)}</td><td>${fmt0(r.mfe_fim)}</td><td>${fmt0(r.mae_fim)}</td></tr>`).join("");
   $("tabSinais").innerHTML=`<tr>${head}</tr>${body}`;
   $("tabSinais").querySelectorAll("th.s").forEach(th=>th.onclick=()=>{const c=th.dataset.k;st.sort=st.sort.k===c?{k:c,d:-st.sort.d}:{k:c,d:1};render();});
 }
@@ -494,13 +525,15 @@ function bind(){
   $("inCusto").oninput=e=>{st.custo=parseFloat(e.target.value)||0;render();};
   $("selConj").onchange=e=>{st.conj=e.target.value;render();};
   $("selFiltro").onchange=e=>{st.filtro=e.target.value;render();};
-  $("btnOper").onclick=()=>{
-    st.filtro="D"; st.S=2; st.T=5; st.lado="VC"; st.hora="9-14";
-    $("selFiltro").value="D"; $("selS").value=2; $("selT").value=5;
+  const aplicaOper=fl=>{
+    st.filtro=fl; st.S=2; st.T=5; st.lado="VC"; st.hora="9-14";
+    $("selFiltro").value=fl; $("selS").value=2; $("selT").value=5;
     $("chLado").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.v==="VC"));
     $("chHora").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.v==="9-14"));
     render(); $("cardVeredito").scrollIntoView({behavior:"smooth",block:"start"});
   };
+  $("btnOper").onclick=()=>aplicaOper("D");
+  $("btnOperG").onclick=()=>aplicaOper("G");
   $("selSemana").onchange=e=>{st.semana=e.target.value;fillDias();render();};
   $("inBusca").oninput=e=>{st.busca=e.target.value;renderTabela(filtered(baseRows()).filter(r=>r.sinal!==""),st.S,st.T);};
   $("selTema").onchange=e=>{const v=e.target.value; if(v==="auto")document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme",v); render();};
@@ -550,6 +583,11 @@ async function ghLoad(silencioso){
 }
 
 loadEmbedded();
+(function galeria(){
+  const ids=["23-11_a","23-11_b","24-11_a","24-11_b","25-11_a","25-11_b","26-11_a","26-11_b","27-11_a","27-11_b","27-11_c","27-11_d","27-11_e","27-11_f"];
+  const base="https://raw.githubusercontent.com/PedroMateus1991/analise2026/main/imagens/prints/";
+  $("galeria").innerHTML=ids.map(i=>`<a href="${base}${i}.png" target="_blank" rel="noopener"><img loading="lazy" src="${base}${i}.png" alt="Captura anotada ${i}" style="width:100%;border-radius:8px;border:1px solid var(--line)" onerror="this.parentNode.style.display='none'"></a>`).join("");
+})();
 $("ghRepo").value=lsGet("ghRepo")||$("ghRepo").value;
 $("ghToken").value=lsGet("ghToken"); $("ghLembrar").checked=!!lsGet("ghToken");
 $("ghBtn").onclick=()=>ghLoad(false);

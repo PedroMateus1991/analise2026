@@ -8,8 +8,8 @@ Análise semanal do padrão `___scalp4_Pedro_2026_` no WINFUT (Renko), com dashb
 |---|---|
 | `semanas/semana_<1º dia>_<N>R.csv` | CSV consolidado de cada semana (um tijolo por linha, com e sem sinal). É o que o dashboard lê. |
 | `dados/precos_AAAA-MM-DD.csv` | Preços do dia reduzidos (só mudanças de preço, ordem cronológica). |
-| `scripts/` | `reduce.py`, `renko.py`, `gerar_semana.py`, `gerar_dashboard.py`, `modelo_dashboard.tpl` (modelo interno do dashboard, não é para abrir), `analise_medias.py` (estudo das médias e filtros) e `avaliar_operacional.py` (mede os candidatos de operacional). |
-| `imagens/` | Print do Profit anotado mostrando como cada sinal é analisado. |
+| `scripts/` | `reduce.py`, `renko.py`, `gerar_semana.py`, `gerar_dashboard.py`, `modelo_dashboard.tpl` (modelo interno do dashboard, não é para abrir), `analise_medias.py` (estudo das médias e filtros) `avaliar_operacional.py` (mede os candidatos de operacional), `htf.py` (médias 27 e 55 do 42R e do 98R), `analise_contexto.py` (efeito do 42R/98R a favor ou contra) e `anotar_prints.py` (anota as capturas do Profit com as setas e os sinais calculados). |
+| `imagens/` | Print do Profit anotado mostrando como cada sinal é analisado. `imagens/prints/` traz as 14 capturas anotadas de 23 a 27/11 e `conferencia_setas.csv`. |
 | `dashboard.html` | Dashboard. Abre no navegador, carrega as semanas deste repositório e aceita arrastar um CSV. |
 
 ## Fluxo para uma nova semana
